@@ -7,6 +7,7 @@ const Enemy = require('./Enemy');
 const EnemyWaveGenerator = require('../generation/EnemyWaveGenerator');
 const TargetingAI = require('../ai/TargetingAI');
 const CommanderAI = require('../ai/CommanderAI');
+const CommanderMessageGenerator = require('../generation/CommanderMessageGenerator');
 const Logger = require('../utils/Logger');
 
 class Battle {
@@ -42,6 +43,13 @@ class Battle {
 
     // Timing for unit arrival (distance mechanic)
     this.unitDispatchQueue = []; // Units pending arrival
+
+    // Chat system
+    this.messages = []; // Chat history for this battle
+    this.lastMessageTime = 0;
+    this.messageInterval = 8000; // 8s between commander messages
+    this.pendingRequest = false;
+    this.requestTime = 0;
 
     Logger.debug(`Battle ${this.id} created for commander ${commander.name}`);
   }
@@ -86,6 +94,9 @@ class Battle {
    */
   update(deltaTime) {
     if (!this.isActive) return;
+
+    // Update chat/messaging
+    this.updateChat();
 
     // Check for wave completion
     if (this.waveActive && this.enemies.every((e) => !e.isAlive())) {
@@ -210,6 +221,65 @@ class Battle {
   }
 
   /**
+   * Update chat system - generate messages periodically
+   */
+  updateChat() {
+    const now = Date.now();
+
+    // Generate commander message periodically
+    if (now - this.lastMessageTime > this.messageInterval) {
+      const message = CommanderMessageGenerator.generateMessage(this, this.commander);
+
+      this.messages.push({
+        speaker: this.commander.name,
+        text: message,
+        type: 'commander',
+        timestamp: now,
+      });
+
+      this.lastMessageTime = now;
+      this.pendingRequest = true;
+      this.requestTime = now;
+    }
+
+    // Increase stress if request unanswered for too long
+    if (this.pendingRequest && now - this.requestTime > 3000) {
+      this.stressChange += 1; // 1 stress per 3s unanswered
+    }
+  }
+
+  /**
+   * Send a commander message to chat
+   */
+  addMessage(speaker, text, type = 'normal') {
+    this.messages.push({
+      speaker,
+      text,
+      type,
+      timestamp: Date.now(),
+    });
+
+    if (type === 'commander') {
+      this.pendingRequest = true;
+      this.requestTime = Date.now();
+    }
+  }
+
+  /**
+   * Mark pending request as answered
+   */
+  answerRequest() {
+    this.pendingRequest = false;
+  }
+
+  /**
+   * Get recent chat messages
+   */
+  getRecentMessages(count = 10) {
+    return this.messages.slice(-count);
+  }
+
+  /**
    * Get battle state for UI rendering
    */
   getState() {
@@ -228,6 +298,8 @@ class Battle {
       stressChange: this.stressChange,
       map: this.getMap(),
       unitsInQueue: this.unitDispatchQueue.length,
+      messages: this.getRecentMessages(10),
+      pendingRequest: this.pendingRequest,
       createdAt: this.createdAt,
       duration: Date.now() - this.createdAt,
     };

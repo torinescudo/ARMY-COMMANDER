@@ -10,7 +10,10 @@ const Battle = require('./Battle');
 const HubScreen = require('../ui/HubScreen');
 const Renderer = require('../ui/Renderer');
 const TabManager = require('../ui/TabManager');
+const ChatPanel = require('../ui/ChatPanel');
 const CommanderGenerator = require('../generation/CommanderGenerator');
+const NLProcessor = require('../ai/NLProcessor');
+const CommandInterpreter = require('../ai/CommandInterpreter');
 
 class Game {
   constructor() {
@@ -34,6 +37,10 @@ class Game {
     this.nextBattleSpawnTime = 0;
     this.battleSpawnDelay = 8000; // 8s before first battle
     this.waveCounter = 0;
+
+    // Chat and NL
+    this.chatPanel = null;
+    this.nlProcessor = new NLProcessor();
 
     // UI
     this.renderer = null;
@@ -65,6 +72,13 @@ class Game {
 
     // Create tab manager for battles
     this.tabManager = new TabManager(this.renderer);
+
+    // Create chat panel
+    this.chatPanel = new ChatPanel(this.renderer);
+    this.chatPanel.create();
+    this.chatPanel.registerCallback('onSubmit', (text) => {
+      this.handleChatInput(text);
+    });
 
     // Schedule first battle spawn
     this.nextBattleSpawnTime = Date.now() + this.battleSpawnDelay;
@@ -292,6 +306,55 @@ class Game {
     Logger.info('Cleaning up...');
     if (this.renderer) {
       this.renderer.destroy();
+    }
+  }
+
+  /**
+   * Handle chat input from player
+   */
+  handleChatInput(text) {
+    const activeBattle = this.tabManager.getActiveBattle();
+    if (!activeBattle) {
+      this.chatPanel.addMessage('System', 'No active battle', 'system');
+      return;
+    }
+
+    // Add player message to chat
+    this.chatPanel.addMessage('You', text);
+    activeBattle.addMessage('You', text, 'player');
+
+    // Parse command with NL processor
+    const parsed = this.nlProcessor.parseCommand(text);
+
+    if (!parsed.success) {
+      this.chatPanel.addMessage('System', `Parse error: ${parsed.error}`, 'system');
+      Logger.debug('NL parse failed:', parsed);
+      return;
+    }
+
+    // Interpret parsed command
+    const action = CommandInterpreter.interpret(parsed, this, activeBattle.id);
+
+    // Validate action
+    const validation = CommandInterpreter.validate(action, this);
+    if (!validation.valid) {
+      this.chatPanel.addMessage('System', `Invalid action: ${validation.error}`, 'system');
+      return;
+    }
+
+    // Execute action
+    const result = CommandInterpreter.execute(action, this);
+    if (result.success) {
+      this.chatPanel.addMessage('System', result.message, 'system');
+      activeBattle.answerRequest();
+
+      // Generate commander response
+      const CommanderMessageGenerator = require('../generation/CommanderMessageGenerator');
+      const response = CommanderMessageGenerator.generateResponseToAction(action, activeBattle.commander);
+      this.chatPanel.addMessage(activeBattle.commander.name, response, 'response');
+      activeBattle.addMessage(activeBattle.commander.name, response, 'response');
+    } else {
+      this.chatPanel.addMessage('System', `Action failed: ${result.error}`, 'system');
     }
   }
 
