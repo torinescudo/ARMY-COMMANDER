@@ -6,8 +6,10 @@ const Constants = require('../utils/Constants');
 const Logger = require('../utils/Logger');
 const Shop = require('./Shop');
 const Stress = require('./Stress');
+const Battle = require('./Battle');
 const HubScreen = require('../ui/HubScreen');
 const Renderer = require('../ui/Renderer');
+const TabManager = require('../ui/TabManager');
 const CommanderGenerator = require('../generation/CommanderGenerator');
 
 class Game {
@@ -23,12 +25,20 @@ class Game {
     this.shop = new Shop();
     this.stress = new Stress();
     this.commander = null; // Selected commander
-    this.battles = []; // Active battles (Phase 2+)
+    this.selectedCommanderForBattle = null; // Commander to deploy in battle
+    this.battles = []; // Active Battle objects
     this.inventory = []; // Player inventory (alias to shop.inventory)
+
+    // Battle management
+    this.tabManager = null;
+    this.nextBattleSpawnTime = 0;
+    this.battleSpawnDelay = 8000; // 8s before first battle
+    this.waveCounter = 0;
 
     // UI
     this.renderer = null;
     this.hubScreen = null;
+    this.currentScreenMode = 'hub'; // 'hub' or 'battle'
   }
 
   /**
@@ -52,6 +62,12 @@ class Game {
       shop: this.shop.getState(),
       stress: this.stress.getState(),
     });
+
+    // Create tab manager for battles
+    this.tabManager = new TabManager(this.renderer);
+
+    // Schedule first battle spawn
+    this.nextBattleSpawnTime = Date.now() + this.battleSpawnDelay;
 
     this.lastFrameTime = Date.now();
     Logger.info('Game initialized');
@@ -100,6 +116,12 @@ class Game {
     // Update shop (passive gold regen)
     this.shop.updateGold(deltaTimeMs);
 
+    // Update all active battles
+    this.updateBattles(deltaTimeMs);
+
+    // Spawn new battles randomly
+    this.spawnNewBattlesIfNeeded();
+
     // Check game over condition
     if (this.stress.isGameOver()) {
       this.running = false;
@@ -107,9 +129,103 @@ class Game {
     }
 
     // Update current screen
-    if (this.currentScreen === 'hub') {
+    if (this.currentScreenMode === 'hub') {
       this.updateHubScreen();
+    } else if (this.currentScreenMode === 'battle') {
+      this.updateBattleScreen();
     }
+  }
+
+  /**
+   * Update all active battles
+   */
+  updateBattles(deltaTimeMs) {
+    // Update each battle
+    this.battles.forEach((battle) => {
+      battle.update(deltaTimeMs);
+    });
+
+    // Remove completed/lost battles
+    const activeBattles = this.battles.filter((b) => b.isActive);
+    const finishedBattles = this.battles.filter((b) => !b.isActive);
+
+    finishedBattles.forEach((battle) => {
+      if (battle.isLost) {
+        this.stress.add(10, `battle_lost_${battle.id}`);
+        Logger.info(`Battle lost: ${battle.commander.name}`);
+      } else if (battle.isWon) {
+        this.shop.addGold(battle.goldReward);
+        this.stress.reduce(15, `battle_won_${battle.id}`);
+        Logger.info(`Battle won! Gold: +${battle.goldReward}`);
+      }
+
+      // Remove from tab manager
+      this.tabManager.removeBattle(battle.id);
+    });
+
+    this.battles = activeBattles;
+  }
+
+  /**
+   * Spawn new battles randomly
+   */
+  spawnNewBattlesIfNeeded() {
+    const now = Date.now();
+
+    // Don't spawn if max tabs reached
+    if (this.tabManager.battles.length >= this.tabManager.maxTabs) {
+      return;
+    }
+
+    // Check if time to spawn new battle
+    if (now < this.nextBattleSpawnTime) {
+      return;
+    }
+
+    // Random chance based on wave count
+    const chance = Math.min(0.5 + this.waveCounter * 0.05, 0.9);
+    if (Math.random() < chance) {
+      this.openNewBattle();
+    }
+
+    // Schedule next potential spawn
+    this.nextBattleSpawnTime = now + (Math.random() * 5000 + 3000); // 3-8s
+  }
+
+  /**
+   * Open a new battle with a cloned commander
+   */
+  openNewBattle() {
+    // Clone current commander for this battle
+    const battleCommander = CommanderGenerator.generateCommander();
+
+    // Create battle
+    const battle = new Battle(battleCommander);
+    this.battles.push(battle);
+
+    // Add to tab manager
+    const added = this.tabManager.addBattle(battle);
+    if (!added) {
+      this.battles.pop();
+      return;
+    }
+
+    // Increase stress for new battle
+    this.stress.add(2, `new_battle_${battle.id}`);
+
+    // Start first wave
+    battle.startWave();
+
+    this.currentScreenMode = 'battle';
+    Logger.info(`New battle spawned: ${battleCommander.name}`);
+  }
+
+  /**
+   * Update battle screen
+   */
+  updateBattleScreen() {
+    const battleStates = this.tabManager.getAllBattleStates();
+    this.tabManager.updateAllTabs(battleStates);
   }
 
   /**
@@ -127,8 +243,10 @@ class Game {
    * Render current screen
    */
   render() {
-    if (this.currentScreen === 'hub') {
+    if (this.currentScreenMode === 'hub') {
       this.hubScreen.render();
+    } else if (this.currentScreenMode === 'battle') {
+      this.tabManager.render();
     }
   }
 
@@ -178,6 +296,26 @@ class Game {
   }
 
   /**
+   * Send units to a battle
+   */
+  sendUnitsToBattle(units, battleId, distance = 0) {
+    const battle = this.battles.find((b) => b.id === battleId);
+    if (battle) {
+      battle.sendUnits(units, distance);
+
+      // Remove units from inventory
+      units.forEach((unit) => {
+        const idx = this.shop.inventory.findIndex((u) => u.id === unit.id);
+        if (idx !== -1) {
+          this.shop.inventory.splice(idx, 1);
+        }
+      });
+
+      Logger.info(`Sent ${units.length} units to battle ${battleId}`);
+    }
+  }
+
+  /**
    * Get game state (for debugging)
    */
   getState() {
@@ -185,10 +323,16 @@ class Game {
       frameCount: this.frameCount,
       running: this.running,
       paused: this.paused,
-      currentScreen: this.currentScreen,
+      currentScreenMode: this.currentScreenMode,
       commander: this.commander?.getState(),
       shop: this.shop.getState(),
       stress: this.stress.getState(),
+      battles: this.battles.map((b) => ({
+        id: b.id,
+        commander: b.commander.name,
+        wave: b.currentWave,
+        status: b.isLost ? 'lost' : b.isWon ? 'won' : 'active',
+      })),
     };
   }
 }
