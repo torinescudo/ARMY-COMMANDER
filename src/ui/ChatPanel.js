@@ -1,5 +1,11 @@
 /**
- * ChatPanel - displays commander messages and handles input
+ * ╔═══════════════════════════════════════════╗
+ * ║  ChatPanel - La Voz de los Condenados      ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * Through this panel, commanders scream for help.
+ * Through this panel, you answer — or you don't.
+ * Silence is a choice. And it costs stress.
  */
 
 const Screen = require('./Screen');
@@ -7,107 +13,87 @@ const Screen = require('./Screen');
 class ChatPanel extends Screen {
   constructor(renderer) {
     super(renderer);
-    this.messages = []; // Array of { speaker, text, timestamp, type }
+    this.messages = [];
     this.maxMessages = 100;
     this.inputBuffer = '';
     this.callbacks = {};
   }
 
-  /**
-   * Create UI elements
-   */
   create() {
     const dims = this.renderer.getDimensions();
-    const chatHeight = Math.floor(dims.height * 0.3);
+    const chatHeight = Math.max(8, Math.floor(dims.height * 0.3));
 
     // Message history
     this.elements.history = this.renderer.createBox({
-      parent: this.renderer.screen,
-      top: Math.floor(dims.height * 0.65),
+      top: dims.height - chatHeight,
       left: 0,
       width: dims.width,
-      height: chatHeight - 2,
+      height: chatHeight - 3,
       border: 'line',
-      label: ' CHAT ',
+      label: ' ⚰ Voces del Abismo ⚰ ',
       scrollable: true,
       tags: true,
-      style: {
-        fg: 'cyan',
-      },
+      style: { fg: 'cyan', border: { fg: 'magenta' } },
     });
 
     // Input field
     this.elements.input = this.renderer.createBox({
-      parent: this.renderer.screen,
-      top: dims.height - 4,
+      top: dims.height - 3,
       left: 0,
       width: dims.width,
-      height: 4,
+      height: 3,
       border: 'line',
+      inputOnFocus: true,
       focusable: true,
-      label: ' INPUT ',
-      content: '{cyan}> _{/cyan}',
+      label: ' Orden ',
+      content: '{cyan-fg}> {/cyan-fg}_',
       tags: true,
-      style: {
-        fg: 'white',
-      },
+      style: { fg: 'white', border: { fg: 'cyan' } },
     });
 
-    // Setup input key handling
     this.setupInput();
+
+    // Auto-focus input
+    if (this.elements.input) {
+      this.elements.input.focus();
+    }
   }
 
-  /**
-   * Setup input field key handlers
-   */
   setupInput() {
-    if (this.elements.input) {
-      this.elements.input.key(['enter'], () => {
-        if (this.callbacks.onSubmit) {
-          this.callbacks.onSubmit(this.inputBuffer);
-        }
-        this.inputBuffer = '';
-        this.updateInput();
-      });
+    if (!this.elements.input) return;
 
-      // Allow typing
-      this.elements.input.on('keypress', (ch, key) => {
-        if (key.name === 'backspace') {
-          this.inputBuffer = this.inputBuffer.slice(0, -1);
-        } else if (ch && ch.length === 1 && !key.ctrl && !key.meta) {
-          this.inputBuffer += ch;
-        }
-        this.updateInput();
-      });
-    }
+    this.elements.input.key(['enter'], () => {
+      if (this.inputBuffer.trim().length > 0 && this.callbacks.onSubmit) {
+        this.callbacks.onSubmit(this.inputBuffer.trim());
+      }
+      this.inputBuffer = '';
+      this.updateInput();
+    });
+
+    this.elements.input.on('keypress', (ch, key) => {
+      if (key.name === 'backspace') {
+        this.inputBuffer = this.inputBuffer.slice(0, -1);
+      } else if (ch && ch.length === 1 && !key.ctrl && !key.meta) {
+        this.inputBuffer += ch;
+      }
+      this.updateInput();
+    });
   }
 
-  /**
-   * Update input display
-   */
   updateInput() {
-    if (this.elements.input) {
-      const display = this.inputBuffer.length > 50
-        ? this.inputBuffer.slice(-50)
-        : this.inputBuffer;
-
-      this.elements.input.setContent(`{cyan}> {/cyan}${display}_{gray}${' '.repeat(Math.max(0, 50 - display.length))}{/gray}`);
-    }
+    if (!this.elements.input) return;
+    const display = this.inputBuffer.length > 60
+      ? '...' + this.inputBuffer.slice(-57)
+      : this.inputBuffer;
+    this.elements.input.setContent(`{cyan-fg}> {/cyan-fg}${display}{gray-fg}_{/gray-fg}`);
   }
 
-  /**
-   * Add message to chat
-   */
   addMessage(speaker, text, type = 'normal', urgency = 0.5) {
     this.messages.push({
-      speaker,
-      text,
-      type, // 'normal', 'urgent', 'response', 'system'
-      urgency,
+      speaker, text, type, urgency,
       timestamp: Date.now(),
     });
 
-    // Keep only recent messages
     if (this.messages.length > this.maxMessages) {
       this.messages = this.messages.slice(-this.maxMessages);
     }
@@ -115,83 +101,48 @@ class ChatPanel extends Screen {
     this.updateHistory();
   }
 
-  /**
-   * Update message history display
-   */
   updateHistory() {
     if (!this.elements.history) return;
 
     let content = '';
-
-    // Show last 15 messages
-    const recent = this.messages.slice(-15);
+    const recent = this.messages.slice(-12);
 
     recent.forEach((msg) => {
-      const color = this.getMessageColor(msg.type, msg.urgency);
-      const timestamp = new Date(msg.timestamp).toLocaleTimeString();
+      const time = new Date(msg.timestamp).toLocaleTimeString('es-ES', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      });
 
       if (msg.type === 'system') {
-        content += `{gray}[${timestamp}]{/gray} {yellow}${msg.text}{/yellow}\n`;
-      } else if (msg.speaker === 'You' || msg.speaker === 'Player') {
-        content += `{green}[${timestamp}] You:{/green} ${msg.text}\n`;
+        content += `{gray-fg}[${time}] ✦ ${msg.text}{/gray-fg}\n`;
+      } else if (msg.speaker === 'Tú' || msg.speaker === 'You') {
+        content += `{green-fg}[${time}] Tú:{/green-fg} ${msg.text}\n`;
+      } else if (msg.type === 'urgent') {
+        content += `{red-fg}[${time}] ⚠ ${msg.speaker}:{/red-fg} ${msg.text}\n`;
+      } else if (msg.type === 'response') {
+        content += `{yellow-fg}[${time}] ${msg.speaker}:{/yellow-fg} ${msg.text}\n`;
       } else {
-        content += `{${color}}[${timestamp}] ${msg.speaker}:{/${color}} ${msg.text}\n`;
+        content += `{cyan-fg}[${time}] ${msg.speaker}:{/cyan-fg} ${msg.text}\n`;
       }
     });
 
-    this.elements.history.setContent(content || '{gray}Chat ready...{/gray}');
+    this.elements.history.setContent(content || '{gray-fg}Silencio... por ahora.{/gray-fg}');
   }
 
-  /**
-   * Get color for message based on type and urgency
-   */
-  getMessageColor(type, urgency) {
-    switch (type) {
-      case 'urgent':
-        return urgency > 0.7 ? 'red' : 'yellow';
-      case 'response':
-        return 'green';
-      case 'system':
-        return 'gray';
-      default:
-        return 'cyan';
-    }
-  }
-
-  /**
-   * Register callback functions
-   */
   registerCallback(event, fn) {
     this.callbacks[event] = fn;
   }
 
-  /**
-   * Clear chat history
-   */
   clear() {
     this.messages = [];
     this.inputBuffer = '';
-    this.updateHistory();
-    this.updateInput();
+    if (this.elements.history) this.updateHistory();
+    if (this.elements.input) this.updateInput();
   }
 
-  /**
-   * Get last N messages
-   */
-  getRecent(count = 10) {
-    return this.messages.slice(-count);
-  }
-
-  /**
-   * Update display
-   */
   update(state) {
-    // Can be updated with battle state for context
+    // Optional: can receive battle state for context
   }
 
-  /**
-   * Render
-   */
   render() {
     super.render();
   }

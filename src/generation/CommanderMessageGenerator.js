@@ -1,5 +1,11 @@
 /**
- * CommanderMessageGenerator - generates contextual commander messages
+ * ╔═══════════════════════════════════════════╗
+ * ║  CommanderMessageGenerator - Ecos del Campo ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * Every commander screams differently into the void.
+ * Their words shaped by trait, by wave, by desperation.
+ * Listen carefully — or ignore them at your peril.
  */
 
 const Random = require('../utils/Random');

@@ -1,5 +1,11 @@
 /**
- * Enemy AI - handles enemy movement and targeting
+ * ╔═══════════════════════════════════════════╗
+ * ║  EnemyAI - La Voluntad del Enjambre        ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * The horde does not think — it hungers.
+ * Each enemy moves with primal instinct,
+ * drawn toward the living like moths to flame.
  */
 
 const TargetingAI = require('./TargetingAI');

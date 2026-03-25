@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 
 /**
- * ARMY COMMANDER - Entry point
- * Terminal-based RTS/Roguelike hybrid game
+ * ╔═══════════════════════════════════════════════════════╗
+ * ║           ⚰  ARMY COMMANDER  ⚰                       ║
+ * ║     Terminal RTS × Roguelike × Dark Goth ASCII        ║
+ * ╠═══════════════════════════════════════════════════════╣
+ * ║  "En el abismo, cada orden es un pacto con la muerte" ║
+ * ╚═══════════════════════════════════════════════════════╝
+ *
+ * Entry point — the gate opens here.
+ * Beyond lies war, madness, and cursed gold.
  */
 
 const Game = require('./src/core/Game');

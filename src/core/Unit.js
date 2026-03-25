@@ -1,5 +1,11 @@
 /**
- * Unit class - represents a military unit
+ * ╔═══════════════════════════════════════════╗
+ * ║  Unit - Carne para el Matadero             ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * Every unit is a soul purchased with cursed gold.
+ * They march, they fight, they fall — and the abyss
+ * swallows them whole without a second thought.
  */
 
 class Unit {

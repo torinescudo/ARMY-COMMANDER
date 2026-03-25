@@ -1,5 +1,12 @@
 /**
- * Run class - tracks a single roguelike run from start to game over
+ * ╔═══════════════════════════════════════════╗
+ * ║  Run - La Crónica del Descenso             ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * Each run is a descent into madness.
+ * The chronicle records every wave survived,
+ * every soul lost, every coin of cursed gold spent.
+ * When it ends, only the numbers remain.
  */
 
 const { nanoid } = require('nanoid');

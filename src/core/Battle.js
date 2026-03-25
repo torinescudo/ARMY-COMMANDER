@@ -1,13 +1,19 @@
 /**
- * Battle class - manages a single battlefield with units and enemies
+ * ╔════════════════════════════════════════════╗
+ * ║  Battle - El Asedio de los Condenados       ║
+ * ╚════════════════════════════════════════════╝
+ *
+ * Each Battle is a pocket of hell: waves of the damned
+ * crash against your defenses while your commander
+ * screams for reinforcements through the fog of war.
  */
 
 const { nanoid } = require('nanoid');
-const Enemy = require('./Enemy');
 const EnemyWaveGenerator = require('../generation/EnemyWaveGenerator');
 const TargetingAI = require('../ai/TargetingAI');
 const CommanderAI = require('../ai/CommanderAI');
 const CommanderMessageGenerator = require('../generation/CommanderMessageGenerator');
+const Constants = require('../utils/Constants');
 const Logger = require('../utils/Logger');
 
 class Battle {
@@ -16,46 +22,47 @@ class Battle {
     this.commander = commander;
     this.createdAt = Date.now();
 
-    // Units and enemies
-    this.friendlyUnits = []; // Player-sent units
-    this.enemies = []; // Current wave enemies
+    // The living and the dead
+    this.friendlyUnits = [];
+    this.enemies = [];
 
     // Wave progression
     this.currentWave = 1;
     this.maxWaves = 10;
     this.waveActive = false;
     this.waveStartTime = 0;
-    this.waveSpawnDelay = 3000; // 3s between enemy spawns
+    this.waveCooldown = 3000; // 3s between waves
 
     // Battle state
     this.isActive = true;
     this.isLost = false;
     this.isWon = false;
 
-    // Map
-    this.mapWidth = 60;
-    this.mapHeight = 12;
-    this.baseProgress = 100; // How far enemies must advance
+    // Map dimensions
+    this.mapWidth = Constants.BATTLE_MAP_WIDTH;
+    this.mapHeight = Constants.BATTLE_MAP_HEIGHT;
+    this.baseProgress = 100;
 
-    // Rewards/penalties
+    // Rewards and stress
     this.goldReward = 0;
-    this.stressChange = 0;
+    this.pendingStress = 0; // Accumulated stress to apply to Game
 
-    // Timing for unit arrival (distance mechanic)
-    this.unitDispatchQueue = []; // Units pending arrival
+    // Unit arrival queue (distance mechanic)
+    this.unitDispatchQueue = [];
 
     // Chat system
-    this.messages = []; // Chat history for this battle
-    this.lastMessageTime = 0;
-    this.messageInterval = 8000; // 8s between commander messages
+    this.messages = [];
+    this.lastMessageTime = Date.now();
+    this.messageInterval = 8000;
     this.pendingRequest = false;
     this.requestTime = 0;
+    this.lastStressTick = 0; // Prevent per-frame stress
 
-    Logger.debug(`Battle ${this.id} created for commander ${commander.name}`);
+    Logger.debug(`Battle ${this.id} forjada para ${commander.name}`);
   }
 
   /**
-   * Start or spawn next wave
+   * Unleash the next wave from the abyss
    */
   startWave() {
     if (this.currentWave > this.maxWaves) {
@@ -68,69 +75,77 @@ class Battle {
     this.waveStartTime = Date.now();
     this.enemies = EnemyWaveGenerator.generateWave(this.currentWave);
 
-    Logger.debug(`Battle ${this.id}: Wave ${this.currentWave} started with ${this.enemies.length} enemies`);
+    // Assign initial positions (spread across top of map)
+    this.enemies.forEach((enemy, idx) => {
+      enemy.x = 5 + (idx % 8) * 6;
+      enemy.y = 0;
+      enemy.progress = 0;
+    });
+
+    Logger.debug(`Batalla ${this.id}: Oleada ${this.currentWave} — ${this.enemies.length} enemigos emergen`);
   }
 
   /**
-   * Add friendly units to battle
-   * Simulates travel delay based on distance
+   * Send units into the fray. Distance = delay before arrival.
    */
   sendUnits(units, distance = 0) {
-    const delayMs = distance * 50; // 50ms per distance unit
+    const delayMs = distance * 500; // 500ms per distance unit (meaningful delay)
 
-    // Queue for delayed arrival
     units.forEach((unit) => {
+      // Give units initial position in the defense zone
+      const clone = Object.assign({}, unit);
+      clone.x = 8 + Math.floor(Math.random() * (this.mapWidth - 16));
+      clone.y = Math.floor(this.mapHeight * 0.7) + Math.floor(Math.random() * 2);
+
       this.unitDispatchQueue.push({
-        unit: { ...unit },
+        unit: clone,
         arrivalTime: Date.now() + delayMs,
       });
     });
 
-    Logger.debug(`Battle ${this.id}: ${units.length} units sent, arrive in ${delayMs}ms`);
+    Logger.debug(`Batalla ${this.id}: ${units.length} unidades despachadas, llegan en ${delayMs}ms`);
   }
 
   /**
-   * Main update loop - handles movement, targeting, damage
+   * Main update — the heartbeat of carnage
    */
   update(deltaTime) {
     if (!this.isActive) return;
 
-    // Update chat/messaging
+    // Process unit arrivals
+    this.processArrivals();
+
+    // Update chat system
     this.updateChat();
 
-    // Check for wave completion
+    // Check wave completion
     if (this.waveActive && this.enemies.every((e) => !e.isAlive())) {
       this.completeWave();
     }
 
-    // Spawn wave if not active
+    // Start next wave after cooldown
     if (!this.waveActive && this.currentWave <= this.maxWaves) {
-      this.startWave();
+      if (Date.now() - this.waveStartTime > this.waveCooldown) {
+        this.startWave();
+      }
     }
 
-    // Process unit arrivals
-    const now = Date.now();
-    const arrivals = this.unitDispatchQueue.filter((d) => d.arrivalTime <= now);
-    arrivals.forEach((dispatch) => {
-      this.friendlyUnits.push(dispatch.unit);
-    });
-    this.unitDispatchQueue = this.unitDispatchQueue.filter((d) => d.arrivalTime > now);
+    // === COMBAT PHASE ===
 
-    // Update enemy positions
+    // Enemy movement toward base
     this.enemies.forEach((enemy) => {
       if (enemy.isAlive()) {
         enemy.moveTowardBase(deltaTime);
 
-        // Check if reached base
         if (enemy.hasReachedBase(this.baseProgress)) {
-          this.commander.takeDamage(5); // Damage to commander
-          enemy.hp = 0; // Remove enemy
-          this.stressChange += 5; // Stress increase
+          this.commander.takeDamage(5);
+          enemy.hp = 0;
+          this.pendingStress += 5;
         }
       }
     });
 
-    // Combat: friendly units attack
+    // Friendly units attack enemies (type-aware targeting)
     this.friendlyUnits.forEach((unit) => {
       if (unit.hp > 0) {
         const target = TargetingAI.chooseTarget(unit, this.enemies);
@@ -140,88 +155,73 @@ class Battle {
       }
     });
 
-    // Commander AI: position units based on traits
+    // === CRITICAL FIX: Enemies attack friendly units back ===
+    this.enemies.forEach((enemy) => {
+      if (enemy.isAlive() && this.friendlyUnits.length > 0) {
+        const aliveUnits = this.friendlyUnits.filter((u) => u.hp > 0);
+        if (aliveUnits.length > 0) {
+          // Enemies target the nearest friendly unit
+          const target = TargetingAI.getNearest(enemy, aliveUnits);
+          if (target && TargetingAI.isInRange(enemy, target)) {
+            target.hp = Math.max(0, target.hp - enemy.damage);
+          }
+        }
+      }
+    });
+
+    // Remove dead friendly units
+    this.friendlyUnits = this.friendlyUnits.filter((u) => u.hp > 0);
+
+    // Commander AI positions surviving units
     CommanderAI.updatePositions(this.commander, this.friendlyUnits, this.enemies);
 
-    // Check if commander died
+    // Check if commander fell
     if (!this.commander.isAlive()) {
       this.lose();
     }
   }
 
   /**
-   * Complete current wave and progress to next
+   * Process queued unit arrivals
+   */
+  processArrivals() {
+    const now = Date.now();
+    const arrived = this.unitDispatchQueue.filter((d) => d.arrivalTime <= now);
+    arrived.forEach((dispatch) => {
+      this.friendlyUnits.push(dispatch.unit);
+    });
+    this.unitDispatchQueue = this.unitDispatchQueue.filter((d) => d.arrivalTime > now);
+  }
+
+  /**
+   * Wave vanquished — collect the spoils
    */
   completeWave() {
     this.waveActive = false;
     this.currentWave++;
 
-    // Rewards
-    this.goldReward += 50 * this.currentWave;
-    this.stressChange -= 5;
+    this.goldReward += 50 + 10 * (this.currentWave - 1);
+    this.pendingStress -= 5; // Relief
 
-    // Commander regenerates
-    const healAmount = Math.floor(this.commander.maxHealth * 0.3);
+    const healAmount = Math.floor(this.commander.maxHealth * 0.2);
     this.commander.heal(healAmount);
 
-    Logger.debug(`Battle ${this.id}: Wave completed. Progress ${this.currentWave - 1}/${this.maxWaves}`);
+    Logger.debug(`Batalla ${this.id}: Oleada completada. Progreso ${this.currentWave - 1}/${this.maxWaves}`);
   }
 
   /**
-   * Battle lost (commander died)
+   * The commander has fallen. Darkness wins.
    */
   lose() {
     this.isActive = false;
     this.isLost = true;
-    this.stressChange += 10;
+    this.pendingStress += 10;
 
-    Logger.debug(`Battle ${this.id}: LOST - Commander fell`);
+    Logger.debug(`Batalla ${this.id}: DERROTA — ${this.commander.name} ha caído`);
   }
 
   /**
-   * Get rendered map for display
-   */
-  getMap() {
-    const map = [];
-
-    // Create empty map
-    for (let y = 0; y < this.mapHeight; y++) {
-      map[y] = [];
-      for (let x = 0; x < this.mapWidth; x++) {
-        map[y][x] = ' ';
-      }
-    }
-
-    // Draw enemies (advancing from top)
-    this.enemies.forEach((enemy) => {
-      const y = Math.floor((enemy.progress / this.baseProgress) * (this.mapHeight - 1));
-      const x = Math.floor(Math.random() * this.mapWidth);
-
-      if (y >= 0 && y < this.mapHeight && x >= 0 && x < this.mapWidth) {
-        map[y][x] = enemy.symbol || '@';
-      }
-    });
-
-    // Draw friendly units (in battle)
-    this.friendlyUnits.forEach((unit, idx) => {
-      const y = Math.floor(this.mapHeight * 0.7) + (idx % 3);
-      const x = 10 + idx * 6;
-
-      if (y >= 0 && y < this.mapHeight && x >= 0 && x < this.mapWidth) {
-        map[y][x] = unit.symbol || '[?]';
-      }
-    });
-
-    // Draw base line at bottom
-    for (let x = 0; x < this.mapWidth; x++) {
-      map[this.mapHeight - 1][x] = '▔';
-    }
-
-    return map;
-  }
-
-  /**
-   * Update chat system - generate messages periodically
+   * Chat system — commander screams into the void
    */
   updateChat() {
     const now = Date.now();
@@ -242,51 +242,53 @@ class Battle {
       this.requestTime = now;
     }
 
-    // Increase stress if request unanswered for too long
-    if (this.pendingRequest && now - this.requestTime > 3000) {
-      this.stressChange += 1; // 1 stress per 3s unanswered
+    // FIX: Stress penalty for unanswered requests — once per 3 seconds, NOT per frame
+    if (this.pendingRequest) {
+      const unansweredMs = now - this.requestTime;
+      const ticksSince = Math.floor(unansweredMs / 3000);
+      const ticksApplied = Math.floor((this.lastStressTick - this.requestTime) / 3000);
+
+      if (ticksSince > ticksApplied && ticksSince > 0) {
+        this.pendingStress += 1;
+        this.lastStressTick = now;
+      }
     }
   }
 
-  /**
-   * Send a commander message to chat
-   */
   addMessage(speaker, text, type = 'normal') {
-    this.messages.push({
-      speaker,
-      text,
-      type,
-      timestamp: Date.now(),
-    });
-
+    this.messages.push({ speaker, text, type, timestamp: Date.now() });
     if (type === 'commander') {
       this.pendingRequest = true;
       this.requestTime = Date.now();
+      this.lastStressTick = Date.now();
     }
   }
 
-  /**
-   * Mark pending request as answered
-   */
   answerRequest() {
     this.pendingRequest = false;
   }
 
-  /**
-   * Get recent chat messages
-   */
   getRecentMessages(count = 10) {
     return this.messages.slice(-count);
   }
 
   /**
-   * Get battle state for UI rendering
+   * Consume accumulated stress (called by Game to sync)
    */
+  consumePendingStress() {
+    const stress = this.pendingStress;
+    this.pendingStress = 0;
+    return stress;
+  }
+
   getState() {
     return {
       id: this.id,
       commander: this.commander.getState(),
-      friendlyUnits: this.friendlyUnits.map((u) => u.getState()),
+      friendlyUnits: this.friendlyUnits.map((u) => ({
+        ...u,
+        isAlive: u.hp > 0,
+      })),
       enemies: this.enemies.map((e) => e.getState()),
       currentWave: this.currentWave,
       maxWaves: this.maxWaves,
@@ -295,8 +297,8 @@ class Battle {
       isLost: this.isLost,
       isWon: this.isWon,
       goldReward: this.goldReward,
-      stressChange: this.stressChange,
-      map: this.getMap(),
+      pendingStress: this.pendingStress,
+      map: null, // Map rendered by BattleMap, not here
       unitsInQueue: this.unitDispatchQueue.length,
       messages: this.getRecentMessages(10),
       pendingRequest: this.pendingRequest,

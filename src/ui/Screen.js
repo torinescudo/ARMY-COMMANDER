@@ -1,5 +1,11 @@
 /**
- * Base Screen class for all game screens
+ * ╔═══════════════════════════════════════════╗
+ * ║  Screen - El Lienzo de la Oscuridad        ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * Every screen is a canvas painted in shadow.
+ * The base upon which all visions of the abyss
+ * are rendered for mortal eyes.
  */
 
 class Screen {

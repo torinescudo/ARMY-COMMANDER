@@ -72,10 +72,12 @@ function randomBool(probability = 0.5) {
 
 /**
  * Apply variance to a value (+/- percentage)
+ * FIX: use randomFloat instead of randomRange (which floors to int)
  */
 function applyVariance(baseValue, variancePercent) {
   const variance = (baseValue * variancePercent) / 100;
-  return Math.round(baseValue + randomRange(-variance, variance));
+  const delta = randomFloat(-variance, variance);
+  return Math.max(1, Math.round(baseValue + delta));
 }
 
 module.exports = {

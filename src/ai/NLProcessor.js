@@ -1,161 +1,120 @@
 /**
- * Natural Language Processor
- * Parses free-form user commands into structured game actions
- * Uses keyword-based semantic understanding (no external API, fully offline)
+ * ╔══════════════════════════════════════════════╗
+ * ║  NLProcessor - El Oráculo de los Comandos     ║
+ * ╚══════════════════════════════════════════════╝
+ *
+ * Translates the words of the living into orders
+ * that move legions across the damned battlefield.
+ * Fully offline — no gods required.
  */
 
-const Logger = require('../utils/Logger');
-
-// Command keywords mapping
+// Intent keywords (bilingual)
 const INTENT_KEYWORDS = {
-  send: ['send', 'enviá', 'envío', 'despachá', 'despacho', 'manda', 'mandá'],
-  retreat: ['retira', 'retrata', 'huye', 'vuelve', 'regresa', 'atrás'],
-  attack: ['ataca', 'atacá', 'carga', 'embiste', 'ataque'],
-  defend: ['defiende', 'defiéndete', 'resiste', 'aguanta', 'sostén'],
+  send: [
+    'send', 'enviá', 'envía', 'envio', 'envío', 'despacha', 'despachá',
+    'manda', 'mandá', 'dale', 'give', 'pon', 'coloca', 'deploy',
+  ],
+  retreat: [
+    'retreat', 'retira', 'retírate', 'huye', 'vuelve', 'regresa',
+    'atrás', 'back', 'flee', 'withdraw',
+  ],
+  attack: [
+    'attack', 'ataca', 'atacá', 'carga', 'embiste', 'ataque',
+    'charge', 'assault', 'push',
+  ],
+  defend: [
+    'defend', 'defiende', 'defiéndete', 'resiste', 'aguanta',
+    'sostén', 'hold', 'protect', 'guard',
+  ],
 };
 
-// Unit type aliases
+// Unit type aliases (bilingual)
 const UNIT_ALIASES = {
   Infantry: [
-    'infantry',
-    'infantería',
-    'infanteria',
-    'soldier',
-    'soldado',
-    'foot',
-    'infantryman',
+    'infantry', 'infantería', 'infanteria', 'soldier', 'soldado',
+    'foot', 'melee', 'cuerpo',
   ],
   Archer: [
-    'archer',
-    'arquero',
-    'bowman',
-    'ranged',
-    'rango',
-    'arco',
+    'archer', 'arquero', 'bowman', 'ranged', 'arco', 'flecha',
+    'arrow', 'tirador',
   ],
   Cavalry: [
-    'cavalry',
-    'caballería',
-    'caballeria',
-    'knight',
-    'caballo',
-    'horse',
-    'mounted',
+    'cavalry', 'caballería', 'caballeria', 'knight', 'caballo',
+    'horse', 'mounted', 'jinete',
   ],
   Mage: [
-    'mage',
-    'mago',
-    'wizard',
-    'brujo',
-    'hechicero',
-    'spell',
-    'magic',
+    'mage', 'mago', 'wizard', 'brujo', 'hechicero', 'spell',
+    'magic', 'magia', 'caster',
   ],
   Undead: [
-    'undead',
-    'muerto',
-    'skeleton',
-    'zombie',
-    'ghost',
-    'espectro',
-    'muerte',
+    'undead', 'muerto', 'skeleton', 'zombie', 'ghost', 'espectro',
+    'muerte', 'no-muerto', 'esqueleto',
   ],
 };
 
-// Position keywords
+// Position keywords (bilingual)
 const POSITION_KEYWORDS = {
   left: ['left', 'izquierda', 'izq', 'oeste', 'west'],
   right: ['right', 'derecha', 'der', 'este', 'east'],
-  center: ['center', 'centro', 'middle', 'centro'],
-  top: ['top', 'arriba', 'norte', 'north'],
-  bottom: ['bottom', 'abajo', 'sur', 'south'],
-  flank: ['flank', 'flanco', 'lateral'],
-  front: ['front', 'frente', 'vanguardia'],
-  back: ['back', 'atrás', 'retaguardia'],
+  center: ['center', 'centro', 'middle', 'medio'],
+  top: ['top', 'arriba', 'norte', 'north', 'up'],
+  bottom: ['bottom', 'abajo', 'sur', 'south', 'down'],
+  flank: ['flank', 'flanco', 'lateral', 'lado'],
+  front: ['front', 'frente', 'vanguardia', 'forward', 'adelante'],
+  back: ['back', 'atrás', 'retaguardia', 'rear', 'detrás'],
 };
 
-// Urgency indicators (confidence scores)
+// Urgency indicators
 const URGENCY_KEYWORDS = {
   high: [
-    'urgente',
-    'urgency',
-    'now',
-    'ahora',
-    'inmediato',
-    'immediate',
-    'rápido',
-    'quick',
-    '!',
+    'urgente', 'urgent', 'now', 'ahora', 'inmediato', 'immediate',
+    'rápido', 'quick', 'ya', '!',
   ],
-  medium: ['soon', 'pronto', 'rápidamente'],
-  low: [
-    'cuando puedas',
-    'cuando sea',
-    'si quieres',
-    'opcionalmente',
-    'optional',
-  ],
+  medium: ['soon', 'pronto', 'rápidamente', 'fast'],
+  low: ['cuando puedas', 'when possible', 'si quieres', 'opcional', 'optional'],
+};
+
+// Number words — complete bilingual
+const WORD_NUMBERS = {
+  // Spanish
+  un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5,
+  seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10,
+  // English
+  a: 1, one: 1, two: 2, three: 3, four: 4, five: 5,
+  six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
 };
 
 class NLProcessor {
-  constructor() {
-    this.patterns = [];
-    this.buildPatterns();
-  }
-
-  /**
-   * Build semantic patterns for common command structures
-   */
-  buildPatterns() {
-    // Pattern examples: "send 2 archers left", "give me 3 infantry", etc.
-    this.patterns = [
-      {
-        regex: /(\d+)?\s+(\w+)\s+to\s+(\w+)|(\d+)?\s+(\w+)\s+(.+)/,
-        groups: ['count', 'unit_type', 'position'],
-      },
-    ];
-  }
+  constructor() {}
 
   /**
    * Parse user input into structured command
-   * Returns: { intent, unitType, count, position, urgency, confidence, raw }
    */
   parseCommand(text) {
     if (!text || text.trim().length === 0) {
-      return {
-        intent: null,
-        success: false,
-        error: 'Empty input',
-      };
+      return { intent: null, success: false, error: 'Entrada vacía' };
     }
 
     const normalized = text.toLowerCase().trim();
 
-    // Extract intent
-    const intent = this.extractIntent(normalized);
-    if (!intent) {
-      return {
-        intent: null,
-        success: false,
-        error: 'Could not determine intent',
-      };
-    }
-
-    // Extract unit type
+    // Extract all components
     const unitType = this.extractUnitType(normalized);
-
-    // Extract count (default 1)
+    const intent = this.extractIntent(normalized, unitType);
     const count = this.extractCount(normalized) || 1;
-
-    // Extract position
     const position = this.extractPosition(normalized);
-
-    // Extract urgency
     const urgency = this.extractUrgency(normalized);
 
-    // Calculate confidence
+    if (!intent) {
+      return { intent: null, success: false, error: 'No se pudo determinar la orden' };
+    }
+
+    // Confidence: how much info we extracted
     const confidence =
-      (intent ? 0.3 : 0) + (unitType ? 0.3 : 0) + (position ? 0.2 : 0) + (urgency ? 0.2 : 0);
+      (intent ? 0.3 : 0) +
+      (unitType ? 0.3 : 0) +
+      (position ? 0.2 : 0) +
+      (count > 1 ? 0.1 : 0) +
+      0.1; // base confidence for having an intent
 
     return {
       intent,
@@ -165,30 +124,27 @@ class NLProcessor {
       urgency,
       confidence,
       raw: text,
-      success: confidence > 0.4, // Need at least intent + unit or position
+      success: confidence >= 0.4,
     };
   }
 
-  /**
-   * Extract primary intent from text
-   */
-  extractIntent(text) {
-    // Default to 'send' if units are mentioned
-    if (this.extractUnitType(text)) {
-      return 'send';
-    }
-
+  extractIntent(text, hasUnitType) {
+    // Check explicit intent keywords first
     for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS)) {
       if (keywords.some((kw) => text.includes(kw))) {
         return intent;
       }
     }
+
+    // If unit type was detected, default to 'send'
+    if (hasUnitType) return 'send';
+
+    // If a number is present, likely a send command
+    if (this.extractCount(text)) return 'send';
+
     return null;
   }
 
-  /**
-   * Extract unit type from text
-   */
   extractUnitType(text) {
     for (const [unitType, aliases] of Object.entries(UNIT_ALIASES)) {
       if (aliases.some((alias) => text.includes(alias))) {
@@ -198,44 +154,22 @@ class NLProcessor {
     return null;
   }
 
-  /**
-   * Extract numerical count from text
-   */
   extractCount(text) {
-    // Look for numbers: "2 archers", "tres soldados", etc.
-    const numberMatch = text.match(/(\d+)/);
-    if (numberMatch) {
-      return parseInt(numberMatch[1], 10);
-    }
+    // Digit match: "2 archers", "3 soldados"
+    const digitMatch = text.match(/(\d+)/);
+    if (digitMatch) return parseInt(digitMatch[1], 10);
 
-    // Look for word numbers
-    const wordNumbers = {
-      uno: 1,
-      dos: 2,
-      tres: 3,
-      cuatro: 4,
-      cinco: 5,
-      six: 6,
-      seven: 7,
-      eight: 8,
-      nine: 9,
-      ten: 10,
-      a: 1,
-      the: 1,
-    };
-
-    for (const [word, num] of Object.entries(wordNumbers)) {
-      if (text.includes(word)) {
-        return num;
+    // Word number match
+    const words = text.split(/\s+/);
+    for (const word of words) {
+      if (WORD_NUMBERS[word] !== undefined) {
+        return WORD_NUMBERS[word];
       }
     }
 
     return null;
   }
 
-  /**
-   * Extract position/direction from text
-   */
   extractPosition(text) {
     for (const [position, keywords] of Object.entries(POSITION_KEYWORDS)) {
       if (keywords.some((kw) => text.includes(kw))) {
@@ -245,38 +179,16 @@ class NLProcessor {
     return null;
   }
 
-  /**
-   * Extract urgency level (0-1 confidence)
-   */
   extractUrgency(text) {
-    // Check high urgency
-    if (URGENCY_KEYWORDS.high.some((kw) => text.includes(kw))) {
-      return 0.9;
-    }
-
-    // Check medium urgency
-    if (URGENCY_KEYWORDS.medium.some((kw) => text.includes(kw))) {
-      return 0.6;
-    }
-
-    // Check low urgency
-    if (URGENCY_KEYWORDS.low.some((kw) => text.includes(kw))) {
-      return 0.2;
-    }
-
-    // Default medium
+    if (URGENCY_KEYWORDS.high.some((kw) => text.includes(kw))) return 0.9;
+    if (URGENCY_KEYWORDS.medium.some((kw) => text.includes(kw))) return 0.6;
+    if (URGENCY_KEYWORDS.low.some((kw) => text.includes(kw))) return 0.2;
     return 0.5;
   }
 
-  /**
-   * Format parsed command as debug string
-   */
   debugString(parsed) {
-    if (!parsed.success) {
-      return `Parse failed: ${parsed.error}`;
-    }
-
-    return `Intent: ${parsed.intent} | ${parsed.count}x ${parsed.unitType} → ${parsed.position} (urgency: ${(parsed.urgency * 100).toFixed(0)}%)`;
+    if (!parsed.success) return `Fallo: ${parsed.error}`;
+    return `Orden: ${parsed.intent} | ${parsed.count}x ${parsed.unitType || '?'} → ${parsed.position || '?'} (urgencia: ${(parsed.urgency * 100).toFixed(0)}%)`;
   }
 }
 

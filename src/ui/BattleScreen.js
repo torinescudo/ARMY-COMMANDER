@@ -1,123 +1,110 @@
 /**
- * BattleScreen - displays a single active battle
+ * ╔══════════════════════════════════════════╗
+ * ║  BattleScreen - Ventana al Inframundo    ║
+ * ╚══════════════════════════════════════════╝
+ *
+ * Each tab is a window into a different hell.
+ * The commander screams, the dead advance, and you must choose.
  */
 
 const Screen = require('./Screen');
 const BattleMap = require('./BattleMap');
+const Constants = require('../utils/Constants');
 
 class BattleScreen extends Screen {
   constructor(renderer, battle) {
     super(renderer);
     this.battle = battle;
-    this.battleMap = new BattleMap(60, 12);
-    this.lastUpdate = 0;
+    this.battleMap = new BattleMap(Constants.BATTLE_MAP_WIDTH, Constants.BATTLE_MAP_HEIGHT);
   }
 
-  /**
-   * Create UI elements for this battle
-   */
   create() {
     const dims = this.renderer.getDimensions();
 
-    // Header: Battle title and wave info
+    // Header: Battle title, wave info, commander health
     this.elements.header = this.renderer.createBox({
-      parent: this.renderer.screen,
       top: 0,
       left: 0,
       width: dims.width,
-      height: 2,
-      content: `Battle ${this.battle.id.slice(0, 8)} | Wave ${this.battle.currentWave}/${this.battle.maxWaves}`,
+      height: 3,
+      content: '{cyan-fg}Cargando batalla...{/cyan-fg}',
       tags: true,
-      style: {
-        fg: 'cyan',
-      },
       border: 'line',
+      style: { fg: 'cyan', border: { fg: 'cyan' } },
     });
 
-    // Battle map
+    // Battle map display
     this.elements.map = this.renderer.createBox({
-      parent: this.renderer.screen,
       top: 3,
       left: 0,
       width: dims.width,
-      height: 14,
-      content: 'Loading battle...',
+      height: Constants.BATTLE_MAP_HEIGHT + 2,
+      content: '',
       tags: true,
-      scrollable: false,
-      style: {
-        fg: 'white',
-      },
       border: 'line',
+      label: ' ⚔ Campo de Batalla ⚔ ',
+      style: { fg: 'white', border: { fg: 'magenta' } },
     });
 
-    // Footer: Unit count, commands
+    // Footer: unit count, enemies, commands
     this.elements.footer = this.renderer.createBox({
-      parent: this.renderer.screen,
-      top: dims.height - 4,
+      top: Constants.BATTLE_MAP_HEIGHT + 5,
       left: 0,
       width: dims.width,
-      height: 4,
-      content: 'Units: 0 | Enemies: 0 | /send <unit> <direction>',
+      height: 3,
+      content: '',
       tags: true,
-      style: {
-        fg: 'yellow',
-      },
       border: 'line',
+      style: { fg: 'yellow', border: { fg: 'yellow' } },
     });
   }
 
   /**
-   * Update battle display
+   * Update with fresh battle state — repaint the carnage
    */
   update(battleState) {
     if (!battleState) return;
 
-    this.battle = battleState;
-
     // Update header
     if (this.elements.header) {
-      const commander = battleState.commander;
-      const health = `${commander.health}/${commander.maxHealth}`;
-      const content = `{cyan}Battle ${battleState.id.slice(0, 8)} | Wave {yellow}${battleState.currentWave}/${battleState.maxWaves}{/yellow} | ${commander.name} HP: {red}${health}{/red}{/cyan}`;
-      this.elements.header.setContent(content);
+      const cmd = battleState.commander;
+      const hp = `${cmd.health}/${cmd.maxHealth}`;
+      const morale = `${cmd.morale}/${cmd.maxMorale}`;
+      const waveText = `Oleada {yellow-fg}${battleState.currentWave}/${battleState.maxWaves}{/yellow-fg}`;
+      const hpColor = cmd.health < cmd.maxHealth * 0.3 ? 'red-fg' : 'green-fg';
+
+      this.elements.header.setContent(
+        `{cyan-fg}⚰ ${cmd.name}{/cyan-fg} | ${waveText} | HP: {${hpColor}}${hp}{/${hpColor}} | Moral: {magenta-fg}${morale}{/magenta-fg}`
+      );
     }
 
-    // Update map
+    // Update map — THE critical fix: render the map with actual state
     if (this.elements.map) {
-      const mapContent = this.battleMap.toColoredString();
+      const mapContent = this.battleMap.renderToString(battleState);
       this.elements.map.setContent(mapContent);
     }
 
     // Update footer
     if (this.elements.footer) {
       const friendlyCount = battleState.friendlyUnits?.length || 0;
-      const enemyCount = battleState.enemies?.length || 0;
+      const aliveEnemies = battleState.enemies?.filter((e) => e.isAlive).length || 0;
       const queueCount = battleState.unitsInQueue || 0;
 
-      let statusText = 'Ready';
+      let statusText = '{cyan-fg}En combate{/cyan-fg}';
       if (battleState.isLost) {
-        statusText = '{red}LOST - Commander fell{/red}';
+        statusText = '{red-fg}⚰ DERROTA — El comandante ha caído ⚰{/red-fg}';
       } else if (battleState.isWon) {
-        statusText = '{green}WON - All waves cleared{/green}';
+        statusText = '{green-fg}✦ VICTORIA — Oleadas repelidas ✦{/green-fg}';
       } else if (!battleState.waveActive) {
-        statusText = '{yellow}Wave preparing...{/yellow}';
+        statusText = '{yellow-fg}Preparando oleada...{/yellow-fg}';
       }
 
-      const content = `{cyan}Units: {green}${friendlyCount}{/green} | Enemies: {red}${enemyCount}{/red} | Queue: ${queueCount} | Status: ${statusText}{/cyan}`;
-      this.elements.footer.setContent(content);
+      this.elements.footer.setContent(
+        `{green-fg}Aliados: ${friendlyCount}{/green-fg} | {red-fg}Enemigos: ${aliveEnemies}{/red-fg} | Cola: ${queueCount} | ${statusText}`
+      );
     }
   }
 
-  /**
-   * Get current battle object
-   */
-  getBattle() {
-    return this.battle;
-  }
-
-  /**
-   * Render this screen
-   */
   render() {
     super.render();
   }

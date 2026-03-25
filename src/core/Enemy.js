@@ -1,5 +1,11 @@
 /**
- * Enemy class - represents a hostile unit in battle
+ * ╔═══════════════════════════════════════════╗
+ * ║  Enemy - Los Hijos del Vacío               ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * They emerge from the darkness in endless waves.
+ * No names worth remembering, no mercy worth giving.
+ * Each one a vessel of destruction marching toward your base.
  */
 
 class Enemy {

@@ -1,5 +1,11 @@
 /**
- * Procedural unit generation
+ * ╔═══════════════════════════════════════════╗
+ * ║  UnitGenerator - El Altar de Sacrificios   ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * On this altar, flesh is shaped into soldiers.
+ * Each unit born with random fury, random fate,
+ * and a price tag paid in gold stained with blood.
  */
 
 const { nanoid } = require('nanoid');

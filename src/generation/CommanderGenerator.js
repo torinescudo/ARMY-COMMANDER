@@ -1,5 +1,11 @@
 /**
- * Procedural commander generation
+ * ╔═══════════════════════════════════════════╗
+ * ║  CommanderGenerator - La Forja de Líderes  ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * From the depths, commanders are forged —
+ * each one scarred by unique traits, cursed
+ * with ambition, and destined for glory or ruin.
  */
 
 const { nanoid } = require('nanoid');

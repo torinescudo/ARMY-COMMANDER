@@ -1,5 +1,10 @@
 /**
- * EndScreen - Game Over / Run Complete screen
+ * ╔═══════════════════════════════════════════╗
+ * ║  EndScreen - El Epitafio del Comandante    ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * The tombstone where your run is carved in stone.
+ * Every number tells a story of blood and gold.
  */
 
 const Screen = require('./Screen');
@@ -8,130 +13,156 @@ class EndScreen extends Screen {
   constructor(renderer) {
     super(renderer);
     this.runStats = null;
-    this.selectedOption = 0;
+    this.callbacks = {};
   }
 
-  /**
-   * Create UI elements
-   */
   create() {
     const dims = this.renderer.getDimensions();
 
-    // Main display box
+    // Main stats box
     this.elements.main = this.renderer.createBox({
-      parent: this.renderer.screen,
-      top: 2,
-      left: Math.floor(dims.width * 0.1),
-      width: Math.floor(dims.width * 0.8),
+      top: 1,
+      left: Math.floor(dims.width * 0.05),
+      width: Math.floor(dims.width * 0.9),
       height: dims.height - 6,
       border: 'line',
       scrollable: true,
       tags: true,
-      style: {
-        fg: 'white',
-      },
+      label: ' ⚰ Epitafio ⚰ ',
+      style: { fg: 'white', border: { fg: 'magenta' } },
     });
 
-    // Buttons
+    // NEW RUN button
     this.elements.newRunBtn = this.renderer.createButton({
-      parent: this.renderer.screen,
       top: dims.height - 4,
-      left: Math.floor(dims.width * 0.2),
-      width: 15,
+      left: Math.floor(dims.width * 0.15),
+      width: 18,
       height: 3,
-      content: '{center}[NEW RUN]{/center}',
+      content: '{center}[NUEVA PARTIDA]{/center}',
+      tags: true,
       border: 'line',
       style: {
-        fg: 'cyan',
+        fg: 'green',
+        border: { fg: 'green' },
+        hover: { fg: 'white', bg: 'green' },
       },
     });
 
+    // EXIT button
     this.elements.exitBtn = this.renderer.createButton({
-      parent: this.renderer.screen,
       top: dims.height - 4,
-      left: Math.floor(dims.width * 0.65),
-      width: 15,
+      left: Math.floor(dims.width * 0.6),
+      width: 12,
       height: 3,
-      content: '{center}[EXIT]{/center}',
+      content: '{center}[SALIR]{/center}',
+      tags: true,
       border: 'line',
       style: {
-        fg: 'cyan',
+        fg: 'red',
+        border: { fg: 'red' },
+        hover: { fg: 'white', bg: 'red' },
       },
+    });
+
+    // Wire up buttons
+    if (this.elements.newRunBtn) {
+      this.elements.newRunBtn.on('click', () => {
+        if (this.callbacks.onNewRun) this.callbacks.onNewRun();
+      });
+    }
+
+    if (this.elements.exitBtn) {
+      this.elements.exitBtn.on('click', () => {
+        if (this.callbacks.onExit) this.callbacks.onExit();
+      });
+    }
+
+    // Keyboard shortcuts
+    this.renderer.screen.key(['n'], () => {
+      if (this.callbacks.onNewRun) this.callbacks.onNewRun();
+    });
+    this.renderer.screen.key(['x'], () => {
+      if (this.callbacks.onExit) this.callbacks.onExit();
     });
   }
 
-  /**
-   * Update with run statistics
-   */
+  registerCallback(event, fn) {
+    this.callbacks[event] = fn;
+  }
+
   update(runStats) {
     this.runStats = runStats;
     this.renderStats();
   }
 
-  /**
-   * Render statistics to screen
-   */
   renderStats() {
     if (!this.runStats || !this.elements.main) return;
 
-    const stats = this.runStats;
-    const duration = Math.floor(stats.duration / 60); // minutes
+    const s = this.runStats;
+    const mins = Math.floor(s.duration / 60);
+    const secs = s.duration % 60;
 
-    let content = '';
+    let c = '';
 
-    // Title
-    if (stats.isWon) {
-      content += '{yellow}╔════════════════════════════════════╗{/yellow}\n';
-      content += '{yellow}║   ✓ RUN COMPLETED - VICTORY! ✓      ║{/yellow}\n';
-      content += '{yellow}╚════════════════════════════════════╝{/yellow}\n\n';
-    } else if (stats.isFailed) {
-      content += '{red}╔════════════════════════════════════╗{/red}\n';
-      content += '{red}║      ✕ GAME OVER - STRESS MAX ✕     ║{/red}\n';
-      content += '{red}╚════════════════════════════════════╝{/red}\n\n';
+    // Header
+    if (s.isFailed) {
+      c += '{red-fg}';
+      c += '  ╔═══════════════════════════════════╗\n';
+      c += '  ║    ✕  GAME OVER — ESTRÉS MÁXIMO  ✕   ║\n';
+      c += '  ║  La presión del mando te ha destruido  ║\n';
+      c += '  ╚═══════════════════════════════════╝\n';
+      c += '{/red-fg}\n';
+    } else if (s.isWon) {
+      c += '{yellow-fg}';
+      c += '  ╔═══════════════════════════════════╗\n';
+      c += '  ║  ✦  VICTORIA — LOS MUERTOS CAEN  ✦   ║\n';
+      c += '  ║   Has sobrevivido al asedio infernal   ║\n';
+      c += '  ╚═══════════════════════════════════╝\n';
+      c += '{/yellow-fg}\n';
     } else {
-      content += '{cyan}╔════════════════════════════════════╗{/cyan}\n';
-      content += '{cyan}║          ⚰ GAME OVER ⚰            ║{/cyan}\n';
-      content += '{cyan}╚════════════════════════════════════╝{/cyan}\n\n';
+      c += '{cyan-fg}';
+      c += '  ╔═══════════════════════════════════╗\n';
+      c += '  ║         ⚰  FIN DE PARTIDA  ⚰        ║\n';
+      c += '  ╚═══════════════════════════════════╝\n';
+      c += '{/cyan-fg}\n';
     }
 
-    // Statistics
-    content += '{cyan}═══ RUN STATISTICS ═══{/cyan}\n';
-    content += `Duration: {green}${duration}m${stats.duration % 60}s{/green}\n`;
-    content += `Seed: {gray}${stats.seed}{/gray}\n\n`;
+    // Run info
+    c += `{cyan-fg}Duración:{/cyan-fg} {white-fg}${mins}m ${secs}s{/white-fg}\n`;
+    c += `{cyan-fg}Semilla:{/cyan-fg}  {gray-fg}${Math.floor(s.seed)}{/gray-fg}\n\n`;
 
-    content += '{cyan}═══ BATTLES ═══{/cyan}\n';
-    content += `Battles Opened: {yellow}${stats.totalBattlesOpened}{/yellow}\n`;
-    content += `Victories: {green}${stats.totalBattlesWon}{/green}\n`;
-    content += `Defeats: {red}${stats.totalBattlesLost}{/red}\n\n`;
+    // Battles
+    c += '{magenta-fg}═══ BATALLAS ═══{/magenta-fg}\n';
+    c += `  Abiertas:  {yellow-fg}${s.totalBattlesOpened}{/yellow-fg}\n`;
+    c += `  Victorias: {green-fg}${s.totalBattlesWon}{/green-fg}\n`;
+    c += `  Derrotas:  {red-fg}${s.totalBattlesLost}{/red-fg}\n\n`;
 
-    content += '{cyan}═══ COMBAT ═══{/cyan}\n';
-    content += `Waves Completed: {green}${stats.totalWavesCompleted}{/green}\n`;
-    content += `Enemies Defeated: {yellow}${stats.totalEnemiesKilled}{/yellow}\n`;
-    content += `Units Lost: {red}${stats.totalUnitsLost}{/red}\n\n`;
+    // Combat
+    c += '{magenta-fg}═══ COMBATE ═══{/magenta-fg}\n';
+    c += `  Oleadas completadas:  {green-fg}${s.totalWavesCompleted}{/green-fg}\n`;
+    c += `  Enemigos derrotados:  {yellow-fg}${s.totalEnemiesKilled}{/yellow-fg}\n`;
+    c += `  Unidades perdidas:    {red-fg}${s.totalUnitsLost}{/red-fg}\n\n`;
 
-    content += '{cyan}═══ RESOURCES ═══{/cyan}\n';
-    content += `Total Gold Earned: {green}${stats.totalGoldEarned}g{/green}\n`;
-    content += `Final Difficulty: {yellow}${stats.difficultyMultiplier}x{/yellow}\n\n`;
+    // Economy
+    c += '{magenta-fg}═══ ORO MALDITO ═══{/magenta-fg}\n';
+    c += `  Oro acumulado:  {yellow-fg}${s.totalGoldEarned}g{/yellow-fg}\n`;
+    c += `  Dificultad final: {red-fg}${s.difficultyMultiplier}x{/red-fg}\n\n`;
 
-    // Recent battles
-    if (stats.battleHistory && stats.battleHistory.length > 0) {
-      content += '{cyan}═══ RECENT BATTLES ═══{/cyan}\n';
-
-      const recent = stats.battleHistory.slice(-5);
-      recent.forEach((battle, idx) => {
-        const status = battle.won ? '{green}WON{/green}' : '{red}LOST{/red}';
-        content += `[${idx + 1}] ${battle.commander} Wave ${battle.wave} - ${status} (${battle.enemiesKilled} kills, ${battle.unitsLost} lost)\n`;
+    // Battle history
+    if (s.battleHistory && s.battleHistory.length > 0) {
+      c += '{magenta-fg}═══ ÚLTIMAS BATALLAS ═══{/magenta-fg}\n';
+      s.battleHistory.slice(-5).forEach((b, i) => {
+        const status = b.won ? '{green-fg}VICTORIA{/green-fg}' : '{red-fg}DERROTA{/red-fg}';
+        c += `  [${i + 1}] ${b.commander} — Oleada ${b.wave} ${status}\n`;
+        c += `      {gray-fg}${b.enemiesKilled} enemigos, ${b.unitsLost} caídos{/gray-fg}\n`;
       });
     }
 
-    content += '\n{gray}Press [NEW RUN] or [EXIT]{/gray}';
+    c += '\n{gray-fg}[N] Nueva Partida   [X] Salir{/gray-fg}';
 
-    this.elements.main.setContent(content);
+    this.elements.main.setContent(c);
   }
 
-  /**
-   * Render screen
-   */
   render() {
     super.render();
   }

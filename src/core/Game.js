@@ -1,5 +1,12 @@
 /**
- * Main Game class - orchestrates the game loop and state
+ * ╔═══════════════════════════════════════════════╗
+ * ║  Game - El Corazón del Inframundo              ║
+ * ╚═══════════════════════════════════════════════╝
+ *
+ * The main loop — a heartbeat echoing through
+ * every battlefield, every commander's scream,
+ * every unit's last breath. You are the puppet master.
+ * The stress is real. The death is permanent.
  */
 
 const Constants = require('../utils/Constants');
@@ -14,6 +21,7 @@ const TabManager = require('../ui/TabManager');
 const ChatPanel = require('../ui/ChatPanel');
 const EndScreen = require('../ui/EndScreen');
 const CommanderGenerator = require('../generation/CommanderGenerator');
+const CommanderMessageGenerator = require('../generation/CommanderMessageGenerator');
 const NLProcessor = require('../ai/NLProcessor');
 const CommandInterpreter = require('../ai/CommandInterpreter');
 
@@ -21,23 +29,20 @@ class Game {
   constructor() {
     this.running = true;
     this.paused = false;
-    this.currentScreen = 'hub'; // 'hub' | 'battle'
+    this.currentScreenMode = 'hub'; // 'hub' | 'battle' | 'end'
     this.frameCount = 0;
     this.deltaTime = 0;
     this.lastFrameTime = 0;
 
-    // Game systems
+    // Core systems
     this.shop = new Shop();
     this.stress = new Stress();
-    this.commander = null; // Selected commander
-    this.selectedCommanderForBattle = null; // Commander to deploy in battle
-    this.battles = []; // Active Battle objects
-    this.inventory = []; // Player inventory (alias to shop.inventory)
+    this.commander = null;
+    this.battles = [];
 
-    // Battle management
+    // Battle spawning
     this.tabManager = null;
     this.nextBattleSpawnTime = 0;
-    this.battleSpawnDelay = 8000; // 8s before first battle
     this.waveCounter = 0;
 
     // Chat and NL
@@ -51,32 +56,51 @@ class Game {
     this.renderer = null;
     this.hubScreen = null;
     this.endScreen = null;
-    this.currentScreenMode = 'hub'; // 'hub', 'battle', or 'end'
   }
 
   /**
-   * Initialize the game
+   * Initialize — summon the interface from the void
    */
   initialize() {
-    Logger.info('Initializing game...');
+    Logger.info('Invocando el Inframundo...');
 
-    // Create renderer
     this.renderer = new Renderer();
 
     // Generate initial commander
     this.commander = CommanderGenerator.generateCommander();
-    Logger.info('Generated commander:', this.commander.name);
+    Logger.info(`Comandante invocado: ${this.commander.name}`);
 
     // Create HUB screen
     this.hubScreen = new HubScreen(this.renderer);
     this.hubScreen.create();
+
+    // Wire up HUB callbacks
+    this.hubScreen.registerCallback('onSelect', () => {
+      Logger.info(`Comandante seleccionado: ${this.commander.name}`);
+      // Selection acknowledged — battles will spawn automatically
+    });
+
+    this.hubScreen.registerCallback('onReroll', () => {
+      this.commander = CommanderGenerator.generateCommander();
+      Logger.info(`Nuevo comandante: ${this.commander.name}`);
+    });
+
+    this.hubScreen.registerCallback('onBuyUnit', (unitId) => {
+      const success = this.shop.purchaseUnit(unitId);
+      if (success) {
+        Logger.info(`Unidad adquirida: ${unitId}`);
+      } else {
+        Logger.warn('Compra fallida (sin oro o inventario lleno)');
+      }
+    });
+
     this.hubScreen.update({
       commander: this.commander.getState(),
       shop: this.shop.getState(),
       stress: this.stress.getState(),
     });
 
-    // Create tab manager for battles
+    // Create tab manager
     this.tabManager = new TabManager(this.renderer);
 
     // Create chat panel
@@ -89,22 +113,43 @@ class Game {
     // Create end screen
     this.endScreen = new EndScreen(this.renderer);
     this.endScreen.create();
+    this.endScreen.registerCallback('onNewRun', () => {
+      this.restartGame();
+    });
+    this.endScreen.registerCallback('onExit', () => {
+      this.running = false;
+    });
 
-    // Start new run
+    // Wire up global tab switching keys
+    this.renderer.screen.key(['tab'], () => {
+      if (this.currentScreenMode === 'battle' && this.tabManager.battles.length > 1) {
+        const next = (this.tabManager.currentTabIndex + 1) % this.tabManager.battles.length;
+        this.tabManager.switchTab(next);
+      }
+    });
+
+    this.renderer.screen.key(['1', '2', '3', '4', '5'], (ch) => {
+      if (this.currentScreenMode === 'battle') {
+        const idx = parseInt(ch, 10) - 1;
+        this.tabManager.switchTab(idx);
+      }
+    });
+
+    // Start run
     this.startNewRun();
 
-    // Schedule first battle spawn
-    this.nextBattleSpawnTime = Date.now() + this.battleSpawnDelay;
+    // Schedule first battle
+    this.nextBattleSpawnTime = Date.now() + Constants.BATTLE_SPAWN_INITIAL_DELAY_MS;
 
     this.lastFrameTime = Date.now();
-    Logger.info('Game initialized');
+    Logger.info('El Inframundo despierta');
   }
 
   /**
-   * Main game loop
+   * The eternal loop — every tick, the dead advance
    */
   run() {
-    Logger.info('Starting game loop...');
+    Logger.info('Iniciando ciclo de juego...');
 
     const loop = () => {
       if (!this.running) {
@@ -123,266 +168,204 @@ class Game {
         }
 
         this.frameCount++;
-
-        // Schedule next frame
         setTimeout(loop, Constants.TICK_RATE_MS);
       } catch (error) {
-        Logger.error('Error in game loop:', error);
+        Logger.error('Error en el ciclo:', error);
         this.running = false;
       }
     };
 
-    // Start the loop
     loop();
   }
 
   /**
-   * Update game state
+   * Update — the pulse of war
    */
   update(deltaTimeMs) {
-    // Update shop (passive gold regen)
+    // Economy ticks
     this.shop.updateGold(deltaTimeMs);
 
     // Update all active battles
     this.updateBattles(deltaTimeMs);
 
-    // Spawn new battles randomly
+    // Spawn new battles
     this.spawnNewBattlesIfNeeded();
 
-    // Check game over condition
-    if (this.stress.isGameOver()) {
+    // Game over check
+    if (this.stress.isGameOver() && this.currentScreenMode !== 'end') {
       this.endCurrentRun('stress_max');
+      return;
     }
 
     // Update current screen
-    if (this.currentScreenMode === 'hub') {
-      this.updateHubScreen();
-    } else if (this.currentScreenMode === 'battle') {
-      this.updateBattleScreen();
+    switch (this.currentScreenMode) {
+      case 'hub':
+        this.hubScreen.update({
+          commander: this.commander.getState(),
+          shop: this.shop.getState(),
+          stress: this.stress.getState(),
+        });
+        break;
+
+      case 'battle':
+        this.updateBattleScreens();
+        break;
+
+      case 'end':
+        // End screen is static after initial render
+        break;
     }
   }
 
   /**
-   * Update all active battles
+   * Update all active battles — consume their stress
    */
   updateBattles(deltaTimeMs) {
-    // Update each battle
     this.battles.forEach((battle) => {
       battle.update(deltaTimeMs);
+
+      // Sync stress from battle to game (continuous)
+      const pendingStress = battle.consumePendingStress();
+      if (pendingStress > 0) {
+        this.stress.add(pendingStress, `battle_${battle.id}`);
+      } else if (pendingStress < 0) {
+        this.stress.reduce(Math.abs(pendingStress), `battle_${battle.id}_relief`);
+      }
     });
 
-    // Remove completed/lost battles
-    const activeBattles = this.battles.filter((b) => b.isActive);
-    const finishedBattles = this.battles.filter((b) => !b.isActive);
-
-    finishedBattles.forEach((battle) => {
-      if (battle.isLost) {
-        this.stress.add(10, `battle_lost_${battle.id}`);
-        Logger.info(`Battle lost: ${battle.commander.name}`);
-
-        // Record in run
-        if (this.currentRun) {
-          this.currentRun.recordBattle(battle, false);
-        }
-      } else if (battle.isWon) {
+    // Handle finished battles
+    const finished = this.battles.filter((b) => !b.isActive);
+    finished.forEach((battle) => {
+      if (battle.isLost && this.currentRun) {
+        this.currentRun.recordBattle(battle, false);
+        Logger.info(`⚰ Batalla perdida: ${battle.commander.name}`);
+      } else if (battle.isWon && this.currentRun) {
         this.shop.addGold(battle.goldReward);
-        this.stress.reduce(15, `battle_won_${battle.id}`);
-        Logger.info(`Battle won! Gold: +${battle.goldReward}`);
-
-        // Record in run
-        if (this.currentRun) {
-          this.currentRun.recordBattle(battle, true);
-          this.currentRun.recordWaveCompletion(battle.currentWave, battle.goldReward);
-        }
+        this.currentRun.recordBattle(battle, true);
+        this.currentRun.recordWaveCompletion(battle.currentWave, battle.goldReward);
+        Logger.info(`✦ Victoria: ${battle.commander.name} — +${battle.goldReward}g`);
       }
 
-      // Remove from tab manager
       this.tabManager.removeBattle(battle.id);
     });
 
-    this.battles = activeBattles;
+    this.battles = this.battles.filter((b) => b.isActive);
+
+    // If all battles ended and we're in battle mode, return to hub
+    if (this.battles.length === 0 && this.currentScreenMode === 'battle') {
+      this.currentScreenMode = 'hub';
+    }
   }
 
   /**
-   * Spawn new battles randomly
+   * Update battle screen displays
+   */
+  updateBattleScreens() {
+    const states = this.battles.map((b) => b.getState());
+    this.tabManager.updateAllTabs(states);
+
+    // Update chat with messages from active battle
+    const activeBattle = this.tabManager.getActiveBattle();
+    if (activeBattle) {
+      const msgs = activeBattle.getRecentMessages(5);
+      // Sync new messages to chat panel
+      msgs.forEach((msg) => {
+        if (msg.type === 'commander' && !msg._synced) {
+          this.chatPanel.addMessage(msg.speaker, msg.text, 'urgent', 0.8);
+          msg._synced = true;
+        }
+      });
+    }
+  }
+
+  /**
+   * Spawn new battles from the abyss
    */
   spawnNewBattlesIfNeeded() {
     const now = Date.now();
 
-    // Don't spawn if max tabs reached
-    if (this.tabManager.battles.length >= this.tabManager.maxTabs) {
-      return;
-    }
+    if (this.tabManager.battles.length >= Constants.BATTLE_MAX_CONCURRENT) return;
+    if (now < this.nextBattleSpawnTime) return;
 
-    // Check if time to spawn new battle
-    if (now < this.nextBattleSpawnTime) {
-      return;
-    }
-
-    // Random chance based on wave count
+    // Chance increases with waves completed
     const chance = Math.min(0.5 + this.waveCounter * 0.05, 0.9);
     if (Math.random() < chance) {
       this.openNewBattle();
     }
 
-    // Schedule next potential spawn
-    this.nextBattleSpawnTime = now + (Math.random() * 5000 + 3000); // 3-8s
+    // Schedule next spawn check
+    const minI = Constants.BATTLE_SPAWN_MIN_INTERVAL_MS;
+    const maxI = Constants.BATTLE_SPAWN_MAX_INTERVAL_MS;
+    this.nextBattleSpawnTime = now + minI + Math.random() * (maxI - minI);
   }
 
   /**
-   * Open a new battle with a cloned commander
+   * Open a new battle — another portal to hell
    */
   openNewBattle() {
-    // Clone current commander for this battle
     const battleCommander = CommanderGenerator.generateCommander();
-
-    // Create battle
     const battle = new Battle(battleCommander);
     this.battles.push(battle);
 
-    // Add to tab manager
     const added = this.tabManager.addBattle(battle);
     if (!added) {
       this.battles.pop();
       return;
     }
 
-    // Increase stress for new battle
-    this.stress.add(2, `new_battle_${battle.id}`);
-
-    // Start first wave
+    this.stress.add(Constants.STRESS_PER_NEW_BATTLE, `new_battle_${battle.id}`);
     battle.startWave();
 
+    // Switch to battle view
     this.currentScreenMode = 'battle';
-    Logger.info(`New battle spawned: ${battleCommander.name}`);
+
+    Logger.info(`Nueva batalla: ${battleCommander.name}`);
   }
 
   /**
-   * Update battle screen
-   */
-  updateBattleScreen() {
-    const battleStates = this.tabManager.getAllBattleStates();
-    this.tabManager.updateAllTabs(battleStates);
-  }
-
-  /**
-   * Update HUB screen state
-   */
-  updateHubScreen() {
-    this.hubScreen.update({
-      commander: this.commander.getState(),
-      shop: this.shop.getState(),
-      stress: this.stress.getState(),
-    });
-  }
-
-  /**
-   * Render current screen
-   */
-  render() {
-    if (this.currentScreenMode === 'hub') {
-      this.hubScreen.render();
-    } else if (this.currentScreenMode === 'battle') {
-      this.tabManager.render();
-      if (this.chatPanel) {
-        this.chatPanel.render();
-      }
-    } else if (this.currentScreenMode === 'end') {
-      this.endScreen.render();
-    }
-  }
-
-  /**
-   * Handle input (from HUB screen)
-   */
-  handleInput(inputData) {
-    if (this.currentScreen === 'hub') {
-      this.handleHubInput(inputData);
-    }
-  }
-
-  /**
-   * Handle HUB screen input
-   */
-  handleHubInput(inputData) {
-    switch (inputData.action) {
-      case 'reroll':
-        this.commander = CommanderGenerator.generateCommander();
-        Logger.info('Rerolled commander:', this.commander.name);
-        break;
-
-      case 'select':
-        Logger.info('Selected commander:', this.commander.name);
-        // TODO: In Phase 2, transition to battle screen
-        break;
-
-      case 'buyUnit':
-        const success = this.shop.purchaseUnit(inputData.unitId);
-        if (success) {
-          Logger.info('Purchased unit:', inputData.unitId);
-        } else {
-          Logger.warn('Failed to purchase unit');
-        }
-        break;
-    }
-  }
-
-  /**
-   * Cleanup on exit
-   */
-  cleanup() {
-    Logger.info('Cleaning up...');
-    if (this.renderer) {
-      this.renderer.destroy();
-    }
-  }
-
-  /**
-   * Handle chat input from player
+   * Handle chat input — parse NL and execute
    */
   handleChatInput(text) {
     const activeBattle = this.tabManager.getActiveBattle();
     if (!activeBattle) {
-      this.chatPanel.addMessage('System', 'No active battle', 'system');
+      this.chatPanel.addMessage('Sistema', 'No hay batalla activa', 'system');
       return;
     }
 
-    // Add player message to chat
-    this.chatPanel.addMessage('You', text);
-    activeBattle.addMessage('You', text, 'player');
+    // Show player message
+    this.chatPanel.addMessage('Tú', text);
+    activeBattle.addMessage('Tú', text, 'player');
 
-    // Parse command with NL processor
+    // Parse with NL processor
     const parsed = this.nlProcessor.parseCommand(text);
 
     if (!parsed.success) {
-      this.chatPanel.addMessage('System', `Parse error: ${parsed.error}`, 'system');
-      Logger.debug('NL parse failed:', parsed);
+      this.chatPanel.addMessage('Sistema', `No entendido: ${parsed.error}`, 'system');
       return;
     }
 
-    // Interpret parsed command
+    // Interpret → validate → execute
     const action = CommandInterpreter.interpret(parsed, this, activeBattle.id);
-
-    // Validate action
     const validation = CommandInterpreter.validate(action, this);
+
     if (!validation.valid) {
-      this.chatPanel.addMessage('System', `Invalid action: ${validation.error}`, 'system');
+      this.chatPanel.addMessage('Sistema', validation.error, 'system');
       return;
     }
 
-    // Execute action
     const result = CommandInterpreter.execute(action, this);
     if (result.success) {
-      this.chatPanel.addMessage('System', result.message, 'system');
+      this.chatPanel.addMessage('Sistema', result.message, 'system');
       activeBattle.answerRequest();
 
-      // Generate commander response
-      const CommanderMessageGenerator = require('../generation/CommanderMessageGenerator');
-      const response = CommanderMessageGenerator.generateResponseToAction(action, activeBattle.commander);
+      // Commander responds
+      const response = CommanderMessageGenerator.generateResponseToAction(
+        action, activeBattle.commander
+      );
       this.chatPanel.addMessage(activeBattle.commander.name, response, 'response');
       activeBattle.addMessage(activeBattle.commander.name, response, 'response');
     } else {
-      this.chatPanel.addMessage('System', `Action failed: ${result.error}`, 'system');
+      this.chatPanel.addMessage('Sistema', `Fallo: ${result.error}`, 'system');
     }
   }
 
@@ -391,50 +374,87 @@ class Game {
    */
   sendUnitsToBattle(units, battleId, distance = 0) {
     const battle = this.battles.find((b) => b.id === battleId);
-    if (battle) {
-      battle.sendUnits(units, distance);
+    if (!battle) return;
 
-      // Remove units from inventory
-      units.forEach((unit) => {
-        const idx = this.shop.inventory.findIndex((u) => u.id === unit.id);
-        if (idx !== -1) {
-          this.shop.inventory.splice(idx, 1);
-        }
-      });
+    battle.sendUnits(units, distance);
 
-      Logger.info(`Sent ${units.length} units to battle ${battleId}`);
+    // Remove from inventory
+    units.forEach((unit) => {
+      const idx = this.shop.inventory.findIndex((u) => u.id === unit.id);
+      if (idx !== -1) this.shop.inventory.splice(idx, 1);
+    });
+
+    Logger.info(`${units.length} unidades enviadas a batalla ${battleId}`);
+  }
+
+  /**
+   * Render the appropriate screen
+   */
+  render() {
+    switch (this.currentScreenMode) {
+      case 'hub':
+        this.hubScreen.render();
+        break;
+      case 'battle':
+        this.tabManager.render();
+        break;
+      case 'end':
+        this.endScreen.render();
+        break;
     }
   }
 
   /**
-   * Start a new run
+   * Start a new run — reset the realm
    */
   startNewRun(seed = null) {
     this.currentRun = new Run(this.commander, seed);
-    this.chatPanel.clear();
-    this.tabManager.battles = [];
-    this.tabManager.screens = [];
-    Logger.info(`New run started with seed: ${this.currentRun.seed}`);
+    this.waveCounter = 0;
+    Logger.info(`Nueva partida. Semilla: ${Math.floor(this.currentRun.seed)}`);
   }
 
   /**
-   * End current run
+   * End current run — the final toll
    */
   endCurrentRun(reason = 'unknown') {
     if (!this.currentRun) return;
 
     this.currentRun.endRun(reason);
-    this.running = false;
-
-    Logger.info(`Run ended: ${reason}`, this.currentRun.getStats());
-
-    // Transition to end screen
     this.currentScreenMode = 'end';
     this.endScreen.update(this.currentRun.getStats());
+
+    Logger.info(`Partida terminada: ${reason}`);
   }
 
   /**
-   * Get game state (for debugging)
+   * Restart — rise from the ashes
+   */
+  restartGame() {
+    this.stress = new Stress();
+    this.shop = new Shop();
+    this.commander = CommanderGenerator.generateCommander();
+    this.battles = [];
+    this.tabManager.battles = [];
+    this.tabManager.screens = [];
+    this.tabManager.currentTabIndex = 0;
+    this.chatPanel.clear();
+    this.currentScreenMode = 'hub';
+    this.startNewRun();
+    this.nextBattleSpawnTime = Date.now() + Constants.BATTLE_SPAWN_INITIAL_DELAY_MS;
+
+    Logger.info('El Inframundo renace');
+  }
+
+  /**
+   * Cleanup on exit
+   */
+  cleanup() {
+    Logger.info('Cerrando las puertas del abismo...');
+    if (this.renderer) this.renderer.destroy();
+  }
+
+  /**
+   * Get full game state (debug)
    */
   getState() {
     return {

@@ -1,9 +1,14 @@
 /**
- * HUB Screen - Main interface for commander selection and shop
+ * ╔══════════════════════════════════════════════╗
+ * ║  HubScreen - La Sala del Trono Profanado      ║
+ * ╚══════════════════════════════════════════════╝
+ *
+ * The war room where you choose who leads and who dies.
+ * Select your commander, equip your legions, and wait
+ * for the abyss to open its first portal.
  */
 
 const Screen = require('./Screen');
-const Logger = require('../utils/Logger');
 
 class HubScreen extends Screen {
   constructor(renderer) {
@@ -14,148 +19,133 @@ class HubScreen extends Screen {
     this.callbacks = {};
   }
 
-  /**
-   * Create UI elements
-   */
   create() {
     const dims = this.renderer.getDimensions();
+    const halfW = Math.floor(dims.width / 2);
 
-    // Title/Header
+    // Title
     this.elements.title = this.renderer.createBox({
-      parent: this.renderer.screen,
       top: 0,
       left: 0,
       width: dims.width,
       height: 3,
-      content: '⚰ ARMY COMMANDER ⚰',
+      content: '{center}{magenta-fg}⚰  A R M Y   C O M M A N D E R  ⚰{/magenta-fg}{/center}',
       tags: true,
-      style: {
-        fg: 'magenta',
-        bg: 'black',
-      },
       border: 'line',
+      style: { fg: 'magenta', border: { fg: 'magenta' } },
     });
 
-    // Left panel: Commander info
+    // Left: Commander panel
     this.elements.commanderPanel = this.renderer.drawBorderedBox({
       top: 4,
       left: 1,
-      width: Math.floor(dims.width / 2) - 2,
+      width: halfW - 2,
       height: 14,
-      label: ' COMMANDER ',
-      content: 'Generating...',
+      label: ' ⚔ Comandante ⚔ ',
+      content: 'Invocando...',
       tags: true,
       scrollable: true,
-      style: {
-        fg: 'cyan',
-      },
+      style: { fg: 'cyan', border: { fg: 'cyan' } },
     });
 
-    // Buttons below commander
+    // SELECT button
     this.elements.selectBtn = this.renderer.createButton({
-      parent: this.renderer.screen,
-      mouse: true,
-      clickable: true,
       top: 19,
-      left: 1,
-      width: 12,
+      left: 2,
+      width: 14,
       height: 3,
-      name: 'selectBtn',
-      content: '{center}[SELECT]{/center}',
-      border: 'line',
-      style: {
-        fg: 'cyan',
-        focus: {
-          fg: 'white',
-          bg: 'green',
-        },
-      },
-    });
-
-    this.elements.rerollBtn = this.renderer.createButton({
-      parent: this.renderer.screen,
-      mouse: true,
-      clickable: true,
-      top: 19,
-      left: 15,
-      width: 12,
-      height: 3,
-      name: 'rerollBtn',
-      content: '{center}[REROLL]{/center}',
-      border: 'line',
-      style: {
-        fg: 'cyan',
-        focus: {
-          fg: 'white',
-          bg: 'green',
-        },
-      },
-    });
-
-    // Right panel: Shop
-    this.elements.shopPanel = this.renderer.drawBorderedBox({
-      top: 4,
-      left: Math.floor(dims.width / 2),
-      width: Math.floor(dims.width / 2) - 2,
-      height: 18,
-      label: ' SHOP ',
-      content: 'Generating...',
+      content: '{center}[SELECCIONAR]{/center}',
       tags: true,
-      scrollable: true,
-      style: {
-        fg: 'yellow',
-      },
-    });
-
-    // Bottom panel: Info
-    this.elements.infoPanel = this.renderer.drawBorderedBox({
-      top: Math.floor(dims.height) - 4,
-      left: 1,
-      width: dims.width - 2,
-      height: 4,
-      label: ' INFO ',
-      content: 'Starting...',
-      tags: true,
+      border: 'line',
       style: {
         fg: 'green',
+        border: { fg: 'green' },
+        hover: { fg: 'white', bg: 'green' },
       },
     });
 
-    // Setup button callbacks
+    // REROLL button
+    this.elements.rerollBtn = this.renderer.createButton({
+      top: 19,
+      left: 18,
+      width: 12,
+      height: 3,
+      content: '{center}[REINVOCAR]{/center}',
+      tags: true,
+      border: 'line',
+      style: {
+        fg: 'yellow',
+        border: { fg: 'yellow' },
+        hover: { fg: 'white', bg: 'yellow' },
+      },
+    });
+
+    // Right: Shop panel
+    this.elements.shopPanel = this.renderer.drawBorderedBox({
+      top: 4,
+      left: halfW,
+      width: halfW - 2,
+      height: 18,
+      label: ' ✦ Mercader de Almas ✦ ',
+      content: 'Preparando mercancía...',
+      tags: true,
+      scrollable: true,
+      style: { fg: 'yellow', border: { fg: 'yellow' } },
+    });
+
+    // Bottom: Info panel
+    this.elements.infoPanel = this.renderer.drawBorderedBox({
+      top: dims.height - 5,
+      left: 1,
+      width: dims.width - 2,
+      height: 5,
+      label: ' ⚰ Estado del Mando ⚰ ',
+      content: '',
+      tags: true,
+      style: { fg: 'green', border: { fg: 'cyan' } },
+    });
+
+    // Wire up button click handlers
     this.setupCallbacks();
+
+    // Wire up number keys for buying
+    this.renderer.screen.key(['1', '2', '3', '4', '5'], (ch) => {
+      const idx = parseInt(ch, 10) - 1;
+      if (this.currentShop && this.currentShop.available[idx]) {
+        const unitId = this.currentShop.available[idx].id;
+        if (this.callbacks.onBuyUnit) {
+          this.callbacks.onBuyUnit(unitId);
+        }
+      }
+    });
   }
 
-  /**
-   * Setup button click handlers
-   */
   setupCallbacks() {
     if (this.elements.selectBtn) {
       this.elements.selectBtn.on('click', () => {
-        if (this.callbacks.onSelect) {
-          this.callbacks.onSelect();
-        }
+        if (this.callbacks.onSelect) this.callbacks.onSelect();
       });
     }
 
     if (this.elements.rerollBtn) {
       this.elements.rerollBtn.on('click', () => {
-        if (this.callbacks.onReroll) {
-          this.callbacks.onReroll();
-        }
+        if (this.callbacks.onReroll) this.callbacks.onReroll();
       });
     }
+
+    // Also support keyboard shortcuts
+    this.renderer.screen.key(['s'], () => {
+      if (this.callbacks.onSelect) this.callbacks.onSelect();
+    });
+    this.renderer.screen.key(['r'], () => {
+      if (this.callbacks.onReroll) this.callbacks.onReroll();
+    });
   }
 
-  /**
-   * Register callback functions
-   */
   registerCallback(event, fn) {
     this.callbacks[event] = fn;
   }
 
-  /**
-   * Update screen with game state
-   */
   update(state) {
     this.currentCommander = state.commander;
     this.currentShop = state.shop;
@@ -166,98 +156,81 @@ class HubScreen extends Screen {
     this.updateInfoPanel();
   }
 
-  /**
-   * Update commander display
-   */
   updateCommanderPanel() {
     if (!this.elements.commanderPanel || !this.currentCommander) return;
 
     const cmd = this.currentCommander;
-    const traitsList = cmd.traits.map((t) => `  • ${t}`).join('\n');
+    const traitsList = cmd.traits
+      .map((t) => `  {magenta-fg}•{/magenta-fg} ${t}`)
+      .join('\n');
 
-    const content = `
-{cyan}Name:{/cyan} ${cmd.name}
+    const hpBar = this.createBar(cmd.health, cmd.maxHealth, 'green');
+    const moraleBar = this.createBar(cmd.morale, cmd.maxMorale, 'magenta');
 
-{cyan}Traits:{/cyan}
-${traitsList}
-
-{cyan}Stats:{/cyan}
-  Health: ${cmd.health}/${cmd.maxHealth}
-  Morale: ${cmd.morale}/${cmd.maxMorale}
-  Leadership: ${cmd.leadership}/${cmd.maxLeadership}
-    `;
+    const content =
+      `{cyan-fg}Nombre:{/cyan-fg} {white-fg}${cmd.name}{/white-fg}\n` +
+      `\n` +
+      `{cyan-fg}Marcas del Destino:{/cyan-fg}\n` +
+      `${traitsList}\n` +
+      `\n` +
+      `{cyan-fg}Salud:{/cyan-fg}     ${hpBar} ${cmd.health}/${cmd.maxHealth}\n` +
+      `{cyan-fg}Moral:{/cyan-fg}     ${moraleBar} ${cmd.morale}/${cmd.maxMorale}\n` +
+      `{cyan-fg}Liderazgo:{/cyan-fg} ${cmd.leadership}/${cmd.maxLeadership}\n` +
+      `\n` +
+      `{gray-fg}[S] Seleccionar  [R] Reinvocar{/gray-fg}`;
 
     this.elements.commanderPanel.setContent(content);
   }
 
-  /**
-   * Update shop display
-   */
   updateShopPanel() {
     if (!this.elements.shopPanel || !this.currentShop) return;
 
     const shop = this.currentShop;
-    let content = `{yellow}Gold: {/yellow}${shop.gold}g (${shop.goldPerSecond.toFixed(1)}/s)\n\n`;
+    let content =
+      `{yellow-fg}Oro Maldito:{/yellow-fg} {white-fg}${shop.gold}g{/white-fg} ({green-fg}+${shop.goldPerSecond.toFixed(1)}/s{/green-fg})\n` +
+      `{gray-fg}Inventario: ${shop.inventorySize}/${shop.maxInventorySize}{/gray-fg}\n\n`;
 
     if (shop.available && shop.available.length > 0) {
       shop.available.forEach((unit, idx) => {
-        content += `{cyan}[${idx + 1}] {/cyan}${unit.name}\n`;
-        content += `    HP:${unit.hp} DMG:${unit.damage} SPD:${unit.speed}\n`;
-        content += `    {yellow}Cost: ${unit.cost}g{/yellow}`;
-
-        // Add button indicator
         const canBuy = shop.gold >= unit.cost;
-        const btnText = canBuy
-          ? ' {green}[BUY]{/green}'
-          : ' {red}[NO GOLD]{/red}';
-        content += `${btnText}\n\n`;
+        const costColor = canBuy ? 'green-fg' : 'red-fg';
+
+        content += `{cyan-fg}[${idx + 1}]{/cyan-fg} ${unit.name} ${unit.symbol || ''}\n`;
+        content += `    HP:${unit.hp} DMG:${unit.damage} SPD:${unit.speed} RNG:${unit.range}\n`;
+        content += `    {${costColor}}${unit.cost}g{/${costColor}}`;
+        content += canBuy ? ' {green-fg}← Pulsa [${idx + 1}]{/green-fg}' : ' {red-fg}(sin oro){/red-fg}';
+        content += '\n\n';
       });
     }
-
-    content += `\n{cyan}Inventory: ${shop.inventorySize}/${shop.maxInventorySize}{/cyan}`;
 
     this.elements.shopPanel.setContent(content);
   }
 
-  /**
-   * Update info panel (stress, etc)
-   */
   updateInfoPanel() {
     if (!this.elements.infoPanel || !this.currentStress) return;
 
     const stress = this.currentStress;
-    const stressBar = this.createStressBar(stress.percentage);
+    const stressColor = stress.percentage > 70 ? 'red' : stress.percentage > 40 ? 'yellow' : 'green';
+    const stressBar = this.createBar(stress.current, stress.max, stressColor);
 
-    const content = `
-{cyan}Stress:{/cyan} ${stressBar} ${stress.current}/${stress.max}
-{green}Run Status:{/green} Waiting for first battle...
-    `;
+    const content =
+      `{cyan-fg}Estrés:{/cyan-fg} ${stressBar} ${stress.current}/${stress.max}\n` +
+      `{gray-fg}Aguardando la primera grieta dimensional...{/gray-fg}\n` +
+      `{gray-fg}Las batallas se abrirán pronto. Prepara tus legiones.{/gray-fg}`;
 
     this.elements.infoPanel.setContent(content);
   }
 
   /**
-   * Create a visual stress bar
+   * Create a visual bar using block characters
    */
-  createStressBar(percentage) {
-    const barLength = 20;
-    const filled = Math.round((percentage / 100) * barLength);
-    const empty = barLength - filled;
-
-    let bar = '';
-    for (let i = 0; i < filled; i++) {
-      bar += '█';
-    }
-    for (let i = 0; i < empty; i++) {
-      bar += '░';
-    }
-
-    return bar;
+  createBar(current, max, color) {
+    const barLen = 15;
+    const filled = Math.round((current / max) * barLen);
+    const empty = barLen - filled;
+    return `{${color}-fg}${'█'.repeat(filled)}{/${color}-fg}{gray-fg}${'░'.repeat(empty)}{/gray-fg}`;
   }
 
-  /**
-   * Render the screen
-   */
   render() {
     super.render();
   }

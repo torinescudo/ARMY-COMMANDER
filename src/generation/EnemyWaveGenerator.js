@@ -1,5 +1,10 @@
 /**
- * Procedural enemy wave generation
+ * ╔═══════════════════════════════════════════════╗
+ * ║  EnemyWaveGenerator - El Forjador de Oleadas   ║
+ * ╚═══════════════════════════════════════════════╝
+ *
+ * From the darkness they come. Each wave darker,
+ * more numerous, more relentless than the last.
  */
 
 const { nanoid } = require('nanoid');
@@ -7,108 +12,74 @@ const Constants = require('../utils/Constants');
 const Random = require('../utils/Random');
 const Enemy = require('../core/Enemy');
 
-// Enemy unit templates
-const ENEMY_TYPES = {
-  Infantry: { hp: 8, damage: 2, speed: 1.5, range: 1, symbol: '@' },
-  Archer: { hp: 4, damage: 6, speed: 3, range: 4, symbol: '~' },
-  Cavalry: { hp: 10, damage: 4, speed: 4, range: 1, symbol: '●' },
+// Enemy archetypes — the faces of death
+const ENEMY_TEMPLATES = {
+  Infantry: { hp: 8,  damage: 2, speed: 1.5, range: 2, symbol: '@' },
+  Archer:   { hp: 4,  damage: 6, speed: 3,   range: 5, symbol: '~' },
+  Cavalry:  { hp: 10, damage: 4, speed: 4,   range: 2, symbol: '●' },
 };
 
 const ENEMY_ADJECTIVES = [
-  'Gótico',
-  'Abismal',
-  'Torturado',
-  'Maligno',
-  'Funesto',
-  'Tenebroso',
-  'Profano',
-  'Condenado',
+  'Gótico', 'Abismal', 'Torturado', 'Maligno', 'Funesto',
+  'Tenebroso', 'Profano', 'Condenado', 'Sangriento', 'Aullante',
 ];
 
 /**
- * Generate a random enemy name
+ * Generate a single enemy of a specific type
  */
-function generateEnemyName() {
-  const types = Object.keys(ENEMY_TYPES);
-  const type = Random.pickRandom(types);
-  const adjective = Random.pickRandom(ENEMY_ADJECTIVES);
-  return `${type} ${adjective}`;
-}
+function generateEnemy(type, waveNumber) {
+  const template = ENEMY_TEMPLATES[type];
+  if (!template) return null;
 
-/**
- * Generate a single enemy
- */
-function generateSingleEnemy(waveNumber) {
   const id = nanoid();
-  const types = Object.keys(ENEMY_TYPES);
-  const type = Random.pickRandom(types);
-  const baseStats = ENEMY_TYPES[type];
+  const adjective = Random.pickRandom(ENEMY_ADJECTIVES);
+  const name = `${type} ${adjective}`;
 
-  // Wave scaling: difficulty increases +5% per wave
-  const difficultyMultiplier = 1 + (waveNumber * 0.05);
-
-  const hp = Math.round(baseStats.hp * difficultyMultiplier);
-  const damage = Math.round(baseStats.damage * difficultyMultiplier);
-  const speed = baseStats.speed; // Don't scale speed too much
-  const range = baseStats.range;
-
-  const name = generateEnemyName();
-  const symbol = baseStats.symbol;
+  // Difficulty scales with wave
+  const scale = 1 + waveNumber * Constants.DIFFICULTY_HP_SCALE_PER_WAVE;
+  const dmgScale = 1 + waveNumber * Constants.DIFFICULTY_DMG_SCALE_PER_WAVE;
 
   return new Enemy({
     id,
     name,
     type,
-    hp,
-    damage,
-    speed,
-    range,
-    symbol,
-    x: Math.floor(Math.random() * 60),
+    hp: Math.round(template.hp * scale),
+    damage: Math.round(template.damage * dmgScale),
+    speed: template.speed,
+    range: template.range,
+    symbol: template.symbol,
+    x: 0, // Will be set by Battle.startWave()
     y: 0,
     progress: 0,
   });
 }
 
 /**
- * Generate a complete wave of enemies
- * Composition scales with wave number
+ * Generate a complete wave — the composition of the damned
  */
 function generateWave(waveNumber) {
   const enemies = [];
 
-  // Base composition: more infantry, some archers/cavalry
-  const infantryCount = Math.floor(3 + waveNumber * 0.5); // 3-8 by wave 10
-  const archerCount = Math.floor(1 + waveNumber * 0.3); // 1-4 by wave 10
-  const cavalryCount = Math.floor(0 + waveNumber * 0.1); // 0-1 by wave 10
+  // Composition scales with wave number
+  const infantryCount = Math.floor(3 + waveNumber * 0.5);
+  const archerCount = Math.floor(1 + waveNumber * 0.3);
+  const cavalryCount = Math.floor(waveNumber * 0.15);
 
-  // Generate infantry
   for (let i = 0; i < infantryCount; i++) {
-    const enemy = generateSingleEnemy(waveNumber);
-    enemy.type = 'Infantry';
-    enemies.push(enemy);
+    enemies.push(generateEnemy('Infantry', waveNumber));
   }
-
-  // Generate archers
   for (let i = 0; i < archerCount; i++) {
-    const enemy = generateSingleEnemy(waveNumber);
-    enemy.type = 'Archer';
-    enemies.push(enemy);
+    enemies.push(generateEnemy('Archer', waveNumber));
   }
-
-  // Generate cavalry
   for (let i = 0; i < cavalryCount; i++) {
-    const enemy = generateSingleEnemy(waveNumber);
-    enemy.type = 'Cavalry';
-    enemies.push(enemy);
+    enemies.push(generateEnemy('Cavalry', waveNumber));
   }
 
-  return enemies;
+  return enemies.filter(Boolean);
 }
 
 module.exports = {
   generateWave,
-  generateSingleEnemy,
-  generateEnemyName,
-  ENEMY_TYPES,
+  generateEnemy,
+  ENEMY_TEMPLATES,
 };

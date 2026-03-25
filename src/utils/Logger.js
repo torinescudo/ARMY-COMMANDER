@@ -1,5 +1,11 @@
 /**
- * Simple logging utility
+ * ╔═══════════════════════════════════════════╗
+ * ║  Logger - El Escriba de las Tinieblas      ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * Every event in the abyss is recorded.
+ * Warnings, errors, whispers of debug —
+ * the scribe misses nothing.
  */
 
 const DEBUG = process.env.DEBUG === 'true';

@@ -1,9 +1,13 @@
 /**
- * Blessed terminal renderer wrapper
+ * ╔═══════════════════════════════════════════╗
+ * ║  Renderer - El Espejo del Abismo           ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * The terminal is your window into darkness.
+ * Blessed be the framework that renders the damned.
  */
 
 const blessed = require('blessed');
-const chalk = require('chalk');
 
 class Renderer {
   constructor() {
@@ -11,38 +15,28 @@ class Renderer {
       mouse: true,
       title: '⚰ ARMY COMMANDER ⚰',
       smartCSR: true,
+      fullUnicode: true,
       style: {
-        border: {
-          fg: 'cyan',
-        },
+        bg: 'black',
+        border: { fg: 'cyan' },
       },
     });
 
-    // Handle exit
-    this.screen.key(['escape', 'q', 'C-c'], () => {
-      return process.exit(0);
-    });
+    // Global exit
+    this.screen.key(['escape', 'q', 'C-c'], () => process.exit(0));
   }
 
-  /**
-   * Create a box element
-   */
   createBox(options) {
     return blessed.box({
       parent: this.screen,
       ...options,
       style: {
-        border: {
-          fg: 'cyan',
-        },
+        border: { fg: 'cyan' },
         ...options.style,
       },
     });
   }
 
-  /**
-   * Create a text element
-   */
   createText(options) {
     return blessed.box({
       parent: this.screen,
@@ -50,75 +44,37 @@ class Renderer {
     });
   }
 
-  /**
-   * Create a button-like element
-   */
   createButton(options) {
-    const button = blessed.box({
+    return blessed.box({
       parent: this.screen,
       mouse: true,
       clickable: true,
+      tags: true,
       ...options,
       style: {
-        border: {
-          fg: options.focused ? 'white' : 'cyan',
-        },
-        focus: {
-          fg: 'white',
-          bg: 'blue',
-        },
-        hover: {
-          fg: 'white',
-          bg: 'blue',
-        },
+        border: { fg: 'cyan' },
+        focus: { fg: 'white', bg: 'blue' },
+        hover: { fg: 'white', bg: 'blue' },
         ...options.style,
       },
     });
-
-    return button;
   }
 
-  /**
-   * Draw a bordered box with a label
-   */
   drawBorderedBox(options) {
-    const box = this.createBox({
-      ...options,
+    return this.createBox({
       border: 'line',
-      style: {
-        border: {
-          fg: 'cyan',
-        },
-      },
+      ...options,
     });
-
-    return box;
   }
 
-  /**
-   * Clear the screen
-   */
-  clear() {
-    this.screen.destroy();
-  }
-
-  /**
-   * Render the screen
-   */
   render() {
     this.screen.render();
   }
 
-  /**
-   * Destroy the renderer
-   */
   destroy() {
     this.screen.destroy();
   }
 
-  /**
-   * Get screen dimensions
-   */
   getDimensions() {
     return {
       width: this.screen.width,

@@ -1,5 +1,11 @@
 /**
- * Commander class - represents a commander in the game
+ * ╔═══════════════════════════════════════════╗
+ * ║  Commander - Los Generales Caídos          ║
+ * ╚═══════════════════════════════════════════╝
+ *
+ * Once noble. Now cursed. Each commander bears
+ * the Marks of Destiny — traits that define
+ * how they lead, how they fight, and how they die.
  */
 
 class Commander {
@@ -34,23 +40,18 @@ class Commander {
     return this.health > 0;
   }
 
+  /**
+   * The Marks of Destiny — buffs drawn from the commander's cursed traits
+   */
   getBuffs() {
-    // Return stat buffs based on traits (for future implementation)
-    const buffs = {
-      damage: 1,
-      defense: 1,
-      morale: 1,
-    };
+    const buffs = { damage: 1, defense: 1, morale: 1 };
 
-    if (this.traits.includes('Brutal')) {
-      buffs.damage += 0.2;
-    }
-    if (this.traits.includes('Estratega')) {
-      buffs.defense += 0.3;
-    }
-    if (this.traits.includes('Leal')) {
-      buffs.morale += 0.3;
-    }
+    if (this.traits.includes('Brutal'))    buffs.damage += 0.2;
+    if (this.traits.includes('Estratega')) buffs.defense += 0.3;
+    if (this.traits.includes('Leal'))      buffs.morale += 0.3;
+    if (this.traits.includes('Noble'))     buffs.morale += 0.15;
+    if (this.traits.includes('Vengativo')) buffs.damage += 0.15;
+    if (this.traits.includes('Temerario')) buffs.damage += 0.1;
 
     return buffs;
   }
