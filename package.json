@@ -1,0 +1,26 @@
+{
+  "name": "army-commander",
+  "version": "0.1.0",
+  "description": "Terminal-based RTS/Roguelike hybrid with natural language commands and dark goth ASCII aesthetics",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "dev": "node main.js"
+  },
+  "keywords": [
+    "rts",
+    "roguelike",
+    "terminal",
+    "cli",
+    "game",
+    "ascii"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "chalk": "^4.1.2",
+    "nanoid": "^4.0.0",
+    "commander": "^9.4.1"
+  }
+}
