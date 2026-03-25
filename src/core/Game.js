@@ -7,10 +7,12 @@ const Logger = require('../utils/Logger');
 const Shop = require('./Shop');
 const Stress = require('./Stress');
 const Battle = require('./Battle');
+const Run = require('./Run');
 const HubScreen = require('../ui/HubScreen');
 const Renderer = require('../ui/Renderer');
 const TabManager = require('../ui/TabManager');
 const ChatPanel = require('../ui/ChatPanel');
+const EndScreen = require('../ui/EndScreen');
 const CommanderGenerator = require('../generation/CommanderGenerator');
 const NLProcessor = require('../ai/NLProcessor');
 const CommandInterpreter = require('../ai/CommandInterpreter');
@@ -42,10 +44,14 @@ class Game {
     this.chatPanel = null;
     this.nlProcessor = new NLProcessor();
 
+    // Run tracking
+    this.currentRun = null;
+
     // UI
     this.renderer = null;
     this.hubScreen = null;
-    this.currentScreenMode = 'hub'; // 'hub' or 'battle'
+    this.endScreen = null;
+    this.currentScreenMode = 'hub'; // 'hub', 'battle', or 'end'
   }
 
   /**
@@ -79,6 +85,13 @@ class Game {
     this.chatPanel.registerCallback('onSubmit', (text) => {
       this.handleChatInput(text);
     });
+
+    // Create end screen
+    this.endScreen = new EndScreen(this.renderer);
+    this.endScreen.create();
+
+    // Start new run
+    this.startNewRun();
 
     // Schedule first battle spawn
     this.nextBattleSpawnTime = Date.now() + this.battleSpawnDelay;
@@ -138,8 +151,7 @@ class Game {
 
     // Check game over condition
     if (this.stress.isGameOver()) {
-      this.running = false;
-      Logger.info('Game Over! Stress reached maximum');
+      this.endCurrentRun('stress_max');
     }
 
     // Update current screen
@@ -167,10 +179,21 @@ class Game {
       if (battle.isLost) {
         this.stress.add(10, `battle_lost_${battle.id}`);
         Logger.info(`Battle lost: ${battle.commander.name}`);
+
+        // Record in run
+        if (this.currentRun) {
+          this.currentRun.recordBattle(battle, false);
+        }
       } else if (battle.isWon) {
         this.shop.addGold(battle.goldReward);
         this.stress.reduce(15, `battle_won_${battle.id}`);
         Logger.info(`Battle won! Gold: +${battle.goldReward}`);
+
+        // Record in run
+        if (this.currentRun) {
+          this.currentRun.recordBattle(battle, true);
+          this.currentRun.recordWaveCompletion(battle.currentWave, battle.goldReward);
+        }
       }
 
       // Remove from tab manager
@@ -261,6 +284,11 @@ class Game {
       this.hubScreen.render();
     } else if (this.currentScreenMode === 'battle') {
       this.tabManager.render();
+      if (this.chatPanel) {
+        this.chatPanel.render();
+      }
+    } else if (this.currentScreenMode === 'end') {
+      this.endScreen.render();
     }
   }
 
@@ -379,6 +407,33 @@ class Game {
   }
 
   /**
+   * Start a new run
+   */
+  startNewRun(seed = null) {
+    this.currentRun = new Run(this.commander, seed);
+    this.chatPanel.clear();
+    this.tabManager.battles = [];
+    this.tabManager.screens = [];
+    Logger.info(`New run started with seed: ${this.currentRun.seed}`);
+  }
+
+  /**
+   * End current run
+   */
+  endCurrentRun(reason = 'unknown') {
+    if (!this.currentRun) return;
+
+    this.currentRun.endRun(reason);
+    this.running = false;
+
+    Logger.info(`Run ended: ${reason}`, this.currentRun.getStats());
+
+    // Transition to end screen
+    this.currentScreenMode = 'end';
+    this.endScreen.update(this.currentRun.getStats());
+  }
+
+  /**
    * Get game state (for debugging)
    */
   getState() {
@@ -396,6 +451,7 @@ class Game {
         wave: b.currentWave,
         status: b.isLost ? 'lost' : b.isWon ? 'won' : 'active',
       })),
+      run: this.currentRun?.getStats(),
     };
   }
 }
