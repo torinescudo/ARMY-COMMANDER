@@ -5,7 +5,9 @@
   "main": "main.js",
   "scripts": {
     "start": "node main.js",
-    "dev": "node main.js"
+    "dev": "bash dev-run.sh",
+    "dev:debug": "bash dev-run.sh -d",
+    "dev:watch": "bash dev-run.sh -w"
   },
   "keywords": [
     "rts",

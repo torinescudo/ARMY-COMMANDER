@@ -21,6 +21,7 @@ const Renderer = require('../ui/Renderer');
 const TabManager = require('../ui/TabManager');
 const ChatPanel = require('../ui/ChatPanel');
 const EndScreen = require('../ui/EndScreen');
+const IntroScreen = require('../ui/IntroScreen');
 const CommanderGenerator = require('../generation/CommanderGenerator');
 const CommanderMessageGenerator = require('../generation/CommanderMessageGenerator');
 const NLProcessor = require('../ai/NLProcessor');
@@ -30,7 +31,7 @@ class Game {
   constructor() {
     this.running = true;
     this.paused = false;
-    this.currentScreenMode = 'hub'; // 'hub' | 'battle' | 'end'
+    this.currentScreenMode = 'intro'; // 'intro' | 'hub' | 'battle' | 'end'
     this.frameCount = 0;
     this.deltaTime = 0;
     this.lastFrameTime = 0;
@@ -55,6 +56,7 @@ class Game {
 
     // UI
     this.renderer = null;
+    this.introScreen = null;
     this.hubScreen = null;
     this.endScreen = null;
   }
@@ -66,6 +68,19 @@ class Game {
     Logger.info('Invocando el Inframundo...');
 
     this.renderer = new Renderer();
+
+    // Create intro screen first
+    this.introScreen = new IntroScreen(this.renderer);
+    this.introScreen.create();
+    this.introScreen.registerCallback('onNewGame', () => {
+      this.startFreshGame();
+    });
+    this.introScreen.registerCallback('onContinue', () => {
+      this.startFreshGame();
+    });
+    this.introScreen.registerCallback('onExit', () => {
+      this.running = false;
+    });
 
     // Generate initial commander
     this.commander = CommanderGenerator.generateCommander();
@@ -142,8 +157,9 @@ class Game {
     // Schedule first battle
     this.nextBattleSpawnTime = Date.now() + Constants.BATTLE_SPAWN_INITIAL_DELAY_MS;
 
-    // Start in hub mode
-    this.hubScreen.show();
+    // Start in intro mode
+    this.introScreen.show();
+    this.hubScreen.hide();
     this.endScreen.hide();
     this.chatPanel.hide();
 
@@ -156,6 +172,9 @@ class Game {
 
     // Hide current
     switch (this.currentScreenMode) {
+      case 'intro':
+        this.introScreen.hide();
+        break;
       case 'hub':
         this.hubScreen.hide();
         break;
@@ -172,6 +191,9 @@ class Game {
 
     // Show new
     switch (mode) {
+      case 'intro':
+        this.introScreen.show();
+        break;
       case 'hub':
         this.hubScreen.show();
         break;
@@ -233,6 +255,8 @@ class Game {
    * Update — the pulse of war
    */
   update(deltaTimeMs) {
+    if (this.currentScreenMode === 'intro') return;
+
     // Economy ticks
     this.shop.updateGold(deltaTimeMs);
 
@@ -452,10 +476,31 @@ class Game {
   }
 
   /**
+   * Transition from intro to gameplay
+   */
+  startFreshGame() {
+    this.commander = CommanderGenerator.generateCommander();
+    this.stress = new Stress();
+    this.shop = new Shop();
+    this.battles = [];
+    this.tabManager.battles = [];
+    this.tabManager.screens = [];
+    this.tabManager.currentTabIndex = 0;
+    this.chatPanel.clear();
+    this.startNewRun();
+    this.nextBattleSpawnTime = Date.now() + Constants.BATTLE_SPAWN_INITIAL_DELAY_MS;
+    this.switchScreenMode('hub');
+    Logger.info(`Partida iniciada: ${this.commander.name}`);
+  }
+
+  /**
    * Render the appropriate screen
    */
   render() {
     switch (this.currentScreenMode) {
+      case 'intro':
+        this.introScreen.render();
+        break;
       case 'hub':
         this.hubScreen.render();
         break;
@@ -494,18 +539,7 @@ class Game {
    * Restart — rise from the ashes
    */
   restartGame() {
-    this.stress = new Stress();
-    this.shop = new Shop();
-    this.commander = CommanderGenerator.generateCommander();
-    this.battles = [];
-    this.tabManager.battles = [];
-    this.tabManager.screens = [];
-    this.tabManager.currentTabIndex = 0;
-    this.chatPanel.clear();
-    this.switchScreenMode('hub');
-    this.startNewRun();
-    this.nextBattleSpawnTime = Date.now() + Constants.BATTLE_SPAWN_INITIAL_DELAY_MS;
-
+    this.switchScreenMode('intro');
     Logger.info('El Inframundo renace');
   }
 
