@@ -17,6 +17,7 @@ class HubScreen extends Screen {
     this.currentShop = null;
     this.currentStress = null;
     this.callbacks = {};
+    this.active = false;
   }
 
   create() {
@@ -108,8 +109,9 @@ class HubScreen extends Screen {
     // Wire up button click handlers
     this.setupCallbacks();
 
-    // Wire up number keys for buying
+    // Wire up number keys for buying (only active when hub is visible)
     this.renderer.screen.key(['1', '2', '3', '4', '5'], (ch) => {
+      if (!this.active) return;
       const idx = parseInt(ch, 10) - 1;
       if (this.currentShop && this.currentShop.available[idx]) {
         const unitId = this.currentShop.available[idx].id;
@@ -133,11 +135,13 @@ class HubScreen extends Screen {
       });
     }
 
-    // Also support keyboard shortcuts
+    // Keyboard shortcuts (only active when hub is visible)
     this.renderer.screen.key(['s'], () => {
+      if (!this.active) return;
       if (this.callbacks.onSelect) this.callbacks.onSelect();
     });
     this.renderer.screen.key(['r'], () => {
+      if (!this.active) return;
       if (this.callbacks.onReroll) this.callbacks.onReroll();
     });
   }
@@ -213,10 +217,21 @@ class HubScreen extends Screen {
     const stressColor = stress.percentage > 70 ? 'red' : stress.percentage > 40 ? 'yellow' : 'green';
     const stressBar = this.createBar(stress.current, stress.max, stressColor);
 
+    // Dynamic border color based on stress
+    const borderColor = stress.percentage > 80 ? 'red' : stress.percentage > 50 ? 'yellow' : 'cyan';
+    this.elements.infoPanel.style.border.fg = borderColor;
+
+    let stressWarning = '';
+    if (stress.percentage > 80) {
+      stressWarning = '\n{red-fg,bold}⚠ ESTRÉS CRÍTICO — ¡El mando se desmorona! ⚠{/red-fg,bold}';
+    } else if (stress.percentage > 60) {
+      stressWarning = '\n{yellow-fg}⚠ Estrés elevado — responde a tus comandantes{/yellow-fg}';
+    }
+
     const content =
-      `{cyan-fg}Estrés:{/cyan-fg} ${stressBar} ${stress.current}/${stress.max}\n` +
+      `{cyan-fg}Estrés:{/cyan-fg} ${stressBar} {${stressColor}-fg}${stress.current}/${stress.max}{/${stressColor}-fg}${stressWarning}\n` +
       `{gray-fg}Aguardando la primera grieta dimensional...{/gray-fg}\n` +
-      `{gray-fg}Las batallas se abrirán pronto. Prepara tus legiones.{/gray-fg}`;
+      `{gray-fg}[S] Seleccionar  [R] Reinvocar  [1-5] Comprar unidad{/gray-fg}`;
 
     this.elements.infoPanel.setContent(content);
   }
@@ -229,6 +244,16 @@ class HubScreen extends Screen {
     const filled = Math.round((current / max) * barLen);
     const empty = barLen - filled;
     return `{${color}-fg}${'█'.repeat(filled)}{/${color}-fg}{gray-fg}${'░'.repeat(empty)}{/gray-fg}`;
+  }
+
+  show() {
+    this.active = true;
+    Object.values(this.elements).forEach((el) => { el.show(); });
+  }
+
+  hide() {
+    this.active = false;
+    Object.values(this.elements).forEach((el) => { el.hide(); });
   }
 
   render() {

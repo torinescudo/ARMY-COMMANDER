@@ -71,10 +71,13 @@ class ChatPanel extends Screen {
     });
 
     this.elements.input.on('keypress', (ch, key) => {
+      const MAX_INPUT = 200;
       if (key.name === 'backspace') {
         this.inputBuffer = this.inputBuffer.slice(0, -1);
       } else if (ch && ch.length === 1 && !key.ctrl && !key.meta) {
-        this.inputBuffer += ch;
+        if (this.inputBuffer.length < MAX_INPUT) {
+          this.inputBuffer += ch;
+        }
       }
       this.updateInput();
     });
@@ -141,6 +144,15 @@ class ChatPanel extends Screen {
 
   update(state) {
     // Optional: can receive battle state for context
+  }
+
+  show() {
+    Object.values(this.elements).forEach((el) => { el.show(); });
+    if (this.elements.input) this.elements.input.focus();
+  }
+
+  hide() {
+    Object.values(this.elements).forEach((el) => { el.hide(); });
   }
 
   render() {

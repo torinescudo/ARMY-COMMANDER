@@ -60,10 +60,11 @@ function generateEnemy(type, waveNumber) {
 function generateWave(waveNumber) {
   const enemies = [];
 
-  // Composition scales with wave number
-  const infantryCount = Math.floor(3 + waveNumber * 0.5);
-  const archerCount = Math.floor(1 + waveNumber * 0.3);
-  const cavalryCount = Math.floor(waveNumber * 0.15);
+  // FIX: Cap scaling at wave 20 to prevent lag from 50+ enemies
+  const scalingFactor = Math.min(waveNumber, 20);
+  const infantryCount = Math.floor(3 + scalingFactor * 0.5);
+  const archerCount = Math.floor(1 + scalingFactor * 0.3);
+  const cavalryCount = Math.floor(scalingFactor * 0.15);
 
   for (let i = 0; i < infantryCount; i++) {
     enemies.push(generateEnemy('Infantry', waveNumber));

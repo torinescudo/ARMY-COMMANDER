@@ -80,7 +80,7 @@ const WORD_NUMBERS = {
   un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5,
   seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10,
   // English
-  a: 1, one: 1, two: 2, three: 3, four: 4, five: 5,
+  one: 1, two: 2, three: 3, four: 4, five: 5,
   six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
 };
 
@@ -155,11 +155,11 @@ class NLProcessor {
   }
 
   extractCount(text) {
-    // Digit match: "2 archers", "3 soldados"
-    const digitMatch = text.match(/(\d+)/);
+    // FIX: Use word boundaries for digit match to avoid matching digits inside words
+    const digitMatch = text.match(/\b(\d+)\b/);
     if (digitMatch) return parseInt(digitMatch[1], 10);
 
-    // Word number match
+    // Word number match — split ensures exact word matching (no substring false positives)
     const words = text.split(/\s+/);
     for (const word of words) {
       if (WORD_NUMBERS[word] !== undefined) {

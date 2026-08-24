@@ -22,8 +22,8 @@ class Renderer {
       },
     });
 
-    // Global exit
-    this.screen.key(['escape', 'q', 'C-c'], () => process.exit(0));
+    // Global exit — only Ctrl+C (q/escape conflict with chat input)
+    this.screen.key(['C-c'], () => process.exit(0));
   }
 
   createBox(options) {

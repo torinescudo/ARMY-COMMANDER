@@ -12,6 +12,7 @@ const { nanoid } = require('nanoid');
 const EnemyWaveGenerator = require('../generation/EnemyWaveGenerator');
 const TargetingAI = require('../ai/TargetingAI');
 const CommanderAI = require('../ai/CommanderAI');
+const Random = require('../utils/Random');
 const CommanderMessageGenerator = require('../generation/CommanderMessageGenerator');
 const Constants = require('../utils/Constants');
 const Logger = require('../utils/Logger');
@@ -49,6 +50,7 @@ class Battle {
 
     // Unit arrival queue (distance mechanic)
     this.unitDispatchQueue = [];
+    this.confirmedArrivalIds = [];
 
     // Chat system
     this.messages = [];
@@ -89,13 +91,13 @@ class Battle {
    * Send units into the fray. Distance = delay before arrival.
    */
   sendUnits(units, distance = 0) {
-    const delayMs = distance * 500; // 500ms per distance unit (meaningful delay)
+    const Unit = require('./Unit');
+    const delayMs = distance * 500;
 
     units.forEach((unit) => {
-      // Give units initial position in the defense zone
-      const clone = Object.assign({}, unit);
-      clone.x = 8 + Math.floor(Math.random() * (this.mapWidth - 16));
-      clone.y = Math.floor(this.mapHeight * 0.7) + Math.floor(Math.random() * 2);
+      const clone = new Unit(unit);
+      clone.x = 8 + Math.floor(Random.seededRandom() * (this.mapWidth - 16));
+      clone.y = Math.floor(this.mapHeight * 0.7) + Math.floor(Random.seededRandom() * 2);
 
       this.unitDispatchQueue.push({
         unit: clone,
@@ -189,8 +191,18 @@ class Battle {
     const arrived = this.unitDispatchQueue.filter((d) => d.arrivalTime <= now);
     arrived.forEach((dispatch) => {
       this.friendlyUnits.push(dispatch.unit);
+      this.confirmedArrivalIds.push(dispatch.unit.id);
     });
     this.unitDispatchQueue = this.unitDispatchQueue.filter((d) => d.arrivalTime > now);
+  }
+
+  /**
+   * Get and consume confirmed unit IDs for removal from inventory
+   */
+  getConfirmedUnits() {
+    const ids = this.confirmedArrivalIds.slice();
+    this.confirmedArrivalIds = [];
+    return ids;
   }
 
   /**
@@ -236,6 +248,9 @@ class Battle {
         type: 'commander',
         timestamp: now,
       });
+      if (this.messages.length > 100) {
+        this.messages = this.messages.slice(-100);
+      }
 
       this.lastMessageTime = now;
       this.pendingRequest = true;
@@ -257,6 +272,9 @@ class Battle {
 
   addMessage(speaker, text, type = 'normal') {
     this.messages.push({ speaker, text, type, timestamp: Date.now() });
+    if (this.messages.length > 100) {
+      this.messages = this.messages.slice(-100);
+    }
     if (type === 'commander') {
       this.pendingRequest = true;
       this.requestTime = Date.now();
@@ -286,7 +304,10 @@ class Battle {
       id: this.id,
       commander: this.commander.getState(),
       friendlyUnits: this.friendlyUnits.map((u) => ({
-        ...u,
+        id: u.id, name: u.name, type: u.type,
+        hp: u.hp, maxHp: u.maxHp, damage: u.damage,
+        speed: u.speed, range: u.range, symbol: u.symbol,
+        x: u.x || 0, y: u.y || 0,
         isAlive: u.hp > 0,
       })),
       enemies: this.enemies.map((e) => e.getState()),

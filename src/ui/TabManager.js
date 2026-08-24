@@ -40,10 +40,17 @@ class TabManager {
     const index = this.battles.findIndex((b) => b.id === battleId);
     if (index === -1) return false;
 
+    // Destroy screen elements to avoid orphaned blessed nodes
+    const screen = this.screens[index];
+    if (screen && screen.destroy) screen.destroy();
+
     this.battles.splice(index, 1);
     this.screens.splice(index, 1);
 
-    if (this.currentTabIndex >= this.battles.length && this.battles.length > 0) {
+    // Ensure currentTabIndex is always valid
+    if (this.battles.length === 0) {
+      this.currentTabIndex = 0;
+    } else if (this.currentTabIndex >= this.battles.length) {
       this.currentTabIndex = this.battles.length - 1;
     }
 
@@ -85,14 +92,42 @@ class TabManager {
     for (let i = 0; i < this.battles.length; i++) {
       const b = this.battles[i];
       const active = i === this.currentTabIndex;
-      const color = b.isLost ? 'red' : b.isWon ? 'green' : 'cyan';
-      const label = `[${i + 1}] ${b.commander.name.split(' ')[0]} W:${b.currentWave}`;
+
+      // Dynamic color based on battle state
+      let color = 'cyan';
+      let icon = '⚔';
+      if (b.isLost) {
+        color = 'red';
+        icon = '✕';
+      } else if (b.isWon) {
+        color = 'green';
+        icon = '✦';
+      } else {
+        const hpPercent = b.commander.health / b.commander.maxHealth;
+        if (hpPercent < 0.2) {
+          color = 'red';
+          icon = '⚠';
+        } else if (hpPercent < 0.5) {
+          color = 'yellow';
+          icon = '!';
+        }
+      }
+
+      const label = `${icon} [${i + 1}] ${b.commander.name.split(' ')[0]} W:${b.currentWave}`;
 
       header += active
-        ? `{${color}-fg,inverse} ${label} {/${color}-fg,inverse} `
+        ? `{${color}-fg,inverse,bold} ${label} {/${color}-fg,inverse,bold} `
         : `{${color}-fg} ${label} {/${color}-fg} `;
     }
     return header || '{gray-fg}Sin batallas activas{/gray-fg}';
+  }
+
+  show() {
+    this.screens.forEach((s) => { if (s.show) s.show(); });
+  }
+
+  hide() {
+    this.screens.forEach((s) => { if (s.hide) s.hide(); });
   }
 
   render() {

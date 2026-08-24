@@ -11,6 +11,7 @@
 
 const Constants = require('../utils/Constants');
 const Logger = require('../utils/Logger');
+const Random = require('../utils/Random');
 const Shop = require('./Shop');
 const Stress = require('./Stress');
 const Battle = require('./Battle');
@@ -141,8 +142,47 @@ class Game {
     // Schedule first battle
     this.nextBattleSpawnTime = Date.now() + Constants.BATTLE_SPAWN_INITIAL_DELAY_MS;
 
+    // Start in hub mode
+    this.hubScreen.show();
+    this.endScreen.hide();
+    this.chatPanel.hide();
+
     this.lastFrameTime = Date.now();
     Logger.info('El Inframundo despierta');
+  }
+
+  switchScreenMode(mode) {
+    if (mode === this.currentScreenMode) return;
+
+    // Hide current
+    switch (this.currentScreenMode) {
+      case 'hub':
+        this.hubScreen.hide();
+        break;
+      case 'battle':
+        this.tabManager.hide();
+        this.chatPanel.hide();
+        break;
+      case 'end':
+        this.endScreen.hide();
+        break;
+    }
+
+    this.currentScreenMode = mode;
+
+    // Show new
+    switch (mode) {
+      case 'hub':
+        this.hubScreen.show();
+        break;
+      case 'battle':
+        this.tabManager.show();
+        this.chatPanel.show();
+        break;
+      case 'end':
+        this.endScreen.show();
+        break;
+    }
   }
 
   /**
@@ -163,14 +203,25 @@ class Game {
         this.lastFrameTime = now;
 
         if (!this.paused) {
-          this.update(this.deltaTime);
-          this.render();
+          try {
+            this.update(this.deltaTime);
+          } catch (error) {
+            Logger.error('Fatal error in update:', error);
+            this.running = false;
+            return;
+          }
+
+          try {
+            this.render();
+          } catch (error) {
+            Logger.error('Render error (continuing):', error);
+          }
         }
 
         this.frameCount++;
         setTimeout(loop, Constants.TICK_RATE_MS);
       } catch (error) {
-        Logger.error('Error en el ciclo:', error);
+        Logger.error('Fatal error in game loop:', error);
         this.running = false;
       }
     };
@@ -224,6 +275,13 @@ class Game {
     this.battles.forEach((battle) => {
       battle.update(deltaTimeMs);
 
+      // Remove confirmed units from inventory (they've arrived at the battle)
+      const confirmedUnitIds = battle.getConfirmedUnits();
+      confirmedUnitIds.forEach((unitId) => {
+        const idx = this.shop.inventory.findIndex((u) => u.id === unitId);
+        if (idx !== -1) this.shop.inventory.splice(idx, 1);
+      });
+
       // Sync stress from battle to game (continuous)
       const pendingStress = battle.consumePendingStress();
       if (pendingStress > 0) {
@@ -236,6 +294,19 @@ class Game {
     // Handle finished battles
     const finished = this.battles.filter((b) => !b.isActive);
     finished.forEach((battle) => {
+      // Consume any remaining stress before removing battle
+      const remainingStress = battle.consumePendingStress();
+      if (remainingStress > 0) {
+        this.stress.add(remainingStress, `battle_${battle.id}_final`);
+      } else if (remainingStress < 0) {
+        this.stress.reduce(Math.abs(remainingStress), `battle_${battle.id}_final_relief`);
+      }
+
+      // Return unconfirmed units (still in dispatch queue) back to inventory
+      battle.unitDispatchQueue.forEach((dispatch) => {
+        this.shop.inventory.push(dispatch.unit);
+      });
+
       if (battle.isLost && this.currentRun) {
         this.currentRun.recordBattle(battle, false);
         Logger.info(`⚰ Batalla perdida: ${battle.commander.name}`);
@@ -253,7 +324,7 @@ class Game {
 
     // If all battles ended and we're in battle mode, return to hub
     if (this.battles.length === 0 && this.currentScreenMode === 'battle') {
-      this.currentScreenMode = 'hub';
+      this.switchScreenMode('hub');
     }
   }
 
@@ -289,14 +360,14 @@ class Game {
 
     // Chance increases with waves completed
     const chance = Math.min(0.5 + this.waveCounter * 0.05, 0.9);
-    if (Math.random() < chance) {
+    if (Random.seededRandom() < chance) {
       this.openNewBattle();
     }
 
     // Schedule next spawn check
     const minI = Constants.BATTLE_SPAWN_MIN_INTERVAL_MS;
     const maxI = Constants.BATTLE_SPAWN_MAX_INTERVAL_MS;
-    this.nextBattleSpawnTime = now + minI + Math.random() * (maxI - minI);
+    this.nextBattleSpawnTime = now + minI + Random.seededRandom() * (maxI - minI);
   }
 
   /**
@@ -317,7 +388,7 @@ class Game {
     battle.startWave();
 
     // Switch to battle view
-    this.currentScreenMode = 'battle';
+    this.switchScreenMode('battle');
 
     Logger.info(`Nueva batalla: ${battleCommander.name}`);
   }
@@ -377,13 +448,6 @@ class Game {
     if (!battle) return;
 
     battle.sendUnits(units, distance);
-
-    // Remove from inventory
-    units.forEach((unit) => {
-      const idx = this.shop.inventory.findIndex((u) => u.id === unit.id);
-      if (idx !== -1) this.shop.inventory.splice(idx, 1);
-    });
-
     Logger.info(`${units.length} unidades enviadas a batalla ${battleId}`);
   }
 
@@ -420,7 +484,7 @@ class Game {
     if (!this.currentRun) return;
 
     this.currentRun.endRun(reason);
-    this.currentScreenMode = 'end';
+    this.switchScreenMode('end');
     this.endScreen.update(this.currentRun.getStats());
 
     Logger.info(`Partida terminada: ${reason}`);
@@ -438,7 +502,7 @@ class Game {
     this.tabManager.screens = [];
     this.tabManager.currentTabIndex = 0;
     this.chatPanel.clear();
-    this.currentScreenMode = 'hub';
+    this.switchScreenMode('hub');
     this.startNewRun();
     this.nextBattleSpawnTime = Date.now() + Constants.BATTLE_SPAWN_INITIAL_DELAY_MS;
 

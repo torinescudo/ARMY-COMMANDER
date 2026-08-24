@@ -14,6 +14,7 @@ class EndScreen extends Screen {
     super(renderer);
     this.runStats = null;
     this.callbacks = {};
+    this.active = false;
   }
 
   create() {
@@ -77,11 +78,13 @@ class EndScreen extends Screen {
       });
     }
 
-    // Keyboard shortcuts
+    // Keyboard shortcuts (only active when end screen is visible)
     this.renderer.screen.key(['n'], () => {
+      if (!this.active) return;
       if (this.callbacks.onNewRun) this.callbacks.onNewRun();
     });
     this.renderer.screen.key(['x'], () => {
+      if (!this.active) return;
       if (this.callbacks.onExit) this.callbacks.onExit();
     });
   }
@@ -107,23 +110,23 @@ class EndScreen extends Screen {
     // Header
     if (s.isFailed) {
       c += '{red-fg}';
-      c += '  ╔═══════════════════════════════════╗\n';
-      c += '  ║    ✕  GAME OVER — ESTRÉS MÁXIMO  ✕   ║\n';
-      c += '  ║  La presión del mando te ha destruido  ║\n';
-      c += '  ╚═══════════════════════════════════╝\n';
+      c += '  ╔══════════════════════════════════════════╗\n';
+      c += '  ║   ✕  GAME OVER — ESTRÉS MÁXIMO  ✕       ║\n';
+      c += '  ║   La presión del mando te ha destruido   ║\n';
+      c += '  ╚══════════════════════════════════════════╝\n';
       c += '{/red-fg}\n';
     } else if (s.isWon) {
       c += '{yellow-fg}';
-      c += '  ╔═══════════════════════════════════╗\n';
-      c += '  ║  ✦  VICTORIA — LOS MUERTOS CAEN  ✦   ║\n';
-      c += '  ║   Has sobrevivido al asedio infernal   ║\n';
-      c += '  ╚═══════════════════════════════════╝\n';
+      c += '  ╔══════════════════════════════════════════╗\n';
+      c += '  ║   ✦  VICTORIA — LOS MUERTOS CAEN  ✦     ║\n';
+      c += '  ║    Has sobrevivido al asedio infernal    ║\n';
+      c += '  ╚══════════════════════════════════════════╝\n';
       c += '{/yellow-fg}\n';
     } else {
       c += '{cyan-fg}';
-      c += '  ╔═══════════════════════════════════╗\n';
-      c += '  ║         ⚰  FIN DE PARTIDA  ⚰        ║\n';
-      c += '  ╚═══════════════════════════════════╝\n';
+      c += '  ╔══════════════════════════════════════════╗\n';
+      c += '  ║          ⚰  FIN DE PARTIDA  ⚰           ║\n';
+      c += '  ╚══════════════════════════════════════════╝\n';
       c += '{/cyan-fg}\n';
     }
 
@@ -161,6 +164,16 @@ class EndScreen extends Screen {
     c += '\n{gray-fg}[N] Nueva Partida   [X] Salir{/gray-fg}';
 
     this.elements.main.setContent(c);
+  }
+
+  show() {
+    this.active = true;
+    Object.values(this.elements).forEach((el) => { el.show(); });
+  }
+
+  hide() {
+    this.active = false;
+    Object.values(this.elements).forEach((el) => { el.hide(); });
   }
 
   render() {
