@@ -4,7 +4,8 @@
   "description": "Terminal-based RTS/Roguelike hybrid with natural language commands and dark goth ASCII aesthetics",
   "main": "main.js",
   "scripts": {
-    "start": "node main.js",
+    "start": "node server.js",
+    "terminal": "node main.js",
     "dev": "bash dev-run.sh",
     "dev:debug": "bash dev-run.sh -d",
     "dev:watch": "bash dev-run.sh -w"
@@ -21,6 +22,8 @@
   "license": "MIT",
   "dependencies": {
     "blessed": "^0.1.81",
-    "nanoid": "^4.0.0"
+    "express": "^5.2.1",
+    "nanoid": "^4.0.0",
+    "ws": "^8.21.3"
   }
 }
